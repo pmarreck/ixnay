@@ -129,6 +129,10 @@ ixnay() {
       shift;
       nix-channel --update "$1"
       ;;
+    reify)
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade"
+      sudo nixos-rebuild switch --upgrade
+      ;;
     install | i)
       case $2 in
         # "--force-refresh" | "-f")
