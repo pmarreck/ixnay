@@ -27,79 +27,153 @@ echo_yellow() {
 # Note: May need to run as sudo for some ops. See note below.
 
 _ixnay_help() {
+#   cat << EOF
+# Are you a Nix noob?
+# I have a possible solution! IXNAY! A sane wrapper for ixnay-shell etc
+
+# Configuration:
+#       Set IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the underlying command it will run before it runs it.
+
+# Usage: 
+#       ixnay install | i | upgrade | update | up | system_upgrade | su [--force-refresh] [<packagename>]
+#       -- These are all essentially synonyms.
+#          Updates the local package db, upgrades local packages, then optionally installs a package.
+#          For the reasons why you shouldn't update the local package db without also upgrading all packages,
+#          and why you shouldn't install anything new without first doing the above, see the arch docs.
+#          --force-refresh forces a sync update across all repos and forces reinstalls on any installation
+#          (normally, anything already installed is skipped).
+
+#       ixnay uninstall | u | remove | r [--orphaned | --gone] [<packagename>]
+#       -- Uninstalls a package and removes any dependencies that aren't needed by something else (but non-aggressively).
+#          --orphaned uninstalls any deps not needed by anything which might have been missed.
+#          --gone uninstalls any deps which aren't listed in any known repos (note: may include manually-installed packages!)
+
+#       ixnay orphaned | o
+#       -- List any orphaned deps.
+
+#       ixnay list | l
+#       -- List locally-installed packages.
+
+#       ixnay inspect | info <packagename>
+#       -- Prints out detailed information about a package.
+
+#       ixnay files <packagename>
+#       -- What files WOULD this package install?
+
+#       ixnay owns <path/to/file>
+#       -- What package owns this file? (Can also name any executable in PATH.)
+
+#       ixnay search | s | query | q | find | f [--local | --remote] <expression>
+#       -- Searches package names and descriptions with an expression which can be a regex.
+#          --local searches the local package db, --remote searches the remote db.
+#          Default is --remote.
+
+#       ixnay clean | c | purge
+#       -- Cleans out all cached or partially-downloaded data.
+
+#       ixnay outdated | stale
+#       -- Returns a list of local packages which have a newer remote version.
+#          NOTE: Unlike the naïve solution, this does NOT update the main local package db first!
+#          (Which was very important to keep things in sync. Rolling distro, and all that.)
+
+#       ixnay deptree <packagename>
+#       -- Print out a dependency tree for both the packages this package depends on,
+#          and the other packages dependent on it.
+
+#       ixnay needed_by | deps [--flat | --unique] <packagename>
+#       -- Packages that the named package depends on (as a tree).
+#          The two options return a uniquified flat list instead of a tree
+#          (suitable for outputting to other commands).
+
+#       ixnay needs | depends_on [--flat | --unique] <packagename>
+#       -- Packages that are dependent on the named package (as a tree).
+#          The two options return a uniquified flat list instead of a tree
+#          (suitable for outputting to other commands).
+
+#       ixnay valid[ate] <packagename>
+#       -- Thoroughly checks that all the files belonging to the package are valid.
+
+#       ixnay unlock
+#       -- Unlocks the package lock, in the event it was inadvertently left locked. May require sudo.
+#          Make sure there isn't another package update running in another terminal!
+
+#       ixnay doc[tor]
+#       -- Checks various things in the package system to identify discrepancies.
+#       Probably incomplete, happy to take PR's to improve this.
+# EOF
   cat << EOF
 Are you a Nix noob?
-I have a possible solution! IXNAY! A sane wrapper for ixnay-shell etc
+I have a possible solution! IXNAY! A sane wrapper for nix-shell and friends, etc.
 
 Configuration:
       Set IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the underlying command it will run before it runs it.
 
-Usage: 
-      ixnay install | i | upgrade | update | up | system_upgrade | su [--force-refresh] [<packagename>]
-      -- These are all essentially synonyms.
-         Updates the local package db, upgrades local packages, then optionally installs a package.
-         For the reasons why you shouldn't update the local package db without also upgrading all packages,
-         and why you shouldn't install anything new without first doing the above, see the arch docs.
-         --force-refresh forces a sync update across all repos and forces reinstalls on any installation
-         (normally, anything already installed is skipped).
+Usage:
+      ixnay channels
+      -- Lists nix channels. Lists global channels if sudo'd in a multiuser setup.
 
-      ixnay uninstall | u | remove | r [--orphaned | --gone] [<packagename>]
-      -- Uninstalls a package and removes any dependencies that aren't needed by something else (but non-aggressively).
-         --orphaned uninstalls any deps not needed by anything which might have been missed.
-         --gone uninstalls any deps which aren't listed in any known repos (note: may include manually-installed packages!)
+      ixnay add-channel | add <channelname> <url>
+      -- Adds channel <channelname> via <url>.
 
-      ixnay orphaned | o
-      -- List any orphaned deps.
+      ixnay remove-channel | remove <channelname>
+      -- Removes channel <channelname>.
 
-      ixnay list | l
-      -- List locally-installed packages.
+      ixnay sync <channelname>
+      -- Does a channel update from the Internet, or leave blank for all channels.
 
-      ixnay inspect | info <packagename>
-      -- Prints out detailed information about a package.
+      ixnay reify | realize [no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here]
+      -- Reads the config files, sets up the new config, switches to the new config,
+         optionally doesn't update from the Internet.
 
-      ixnay files <packagename>
-      -- What files WOULD this package install?
+      ixnay see <packagename> [run [<execname> [<args>]]]
+      -- Downloads <packagename>, makes it available in a new shell, optionally runs it
+         while either assuming the executable has the same name as the packagename
+         or using a different executable name, with optional arguments passed to it.
+         Fun example: ixnay see sl run
 
-      ixnay owns <path/to/file>
-      -- What package owns this file? (Can also name any executable in PATH.)
+      ixnay install | i [<channelname>.]<packagename>
+      -- Imperatively installs a package into your profile.
+         If no channel name is specified, use the defaults.
+         Note: This is not a recommended use of Nix because it is not declarative,
+         but it works for people new to Nix who are used to thinking in this way,
+         and it will be preserved from being garbage-collected (but you will lose it
+         if your system dies and you neither have a backup nor have it declaratively
+         named in a configuration file you source-control... which is why the latter
+         is recommended!)
 
-      ixnay search | s | query | q | find | f [--local | --remote] <expression>
-      -- Searches package names and descriptions with an expression which can be a regex.
-         --local searches the local package db, --remote searches the remote db.
-         Default is --remote.
+      ixnay uninstall | u <packagename>
+      -- Imperatively uninstalls a package from your profile.
+         See the caveats/suggestions above for "ixnay install".
 
-      ixnay clean | c | purge
-      -- Cleans out all cached or partially-downloaded data.
+      ixnay update | upgrade | u
+      -- Updates the channels and upgrades any installed packages.
 
-      ixnay outdated | stale
-      -- Returns a list of local packages which have a newer remote version.
-         NOTE: Unlike the naïve solution, this does NOT update the main local package db first!
-         (Which was very important to keep things in sync. Rolling distro, and all that.)
+      ixnay rollback | rb
+      -- Undoes the last store change.
 
-      ixnay deptree <packagename>
-      -- Print out a dependency tree for both the packages this package depends on,
-         and the other packages dependent on it.
+      ixnay list | l [<filter>]
+      -- List packages that are locally-installed in your profile, optionally with a filter.
 
-      ixnay needed_by | deps [--flat | --unique] <packagename>
-      -- Packages that the named package depends on (as a tree).
-         The two options return a uniquified flat list instead of a tree
-         (suitable for outputting to other commands).
+      ixnay search | s | query | q | find | f <pattern>
+      -- Searches all available packages in nixpkgs (downloading its DB first, if necessary)
+         for a pattern.
 
-      ixnay needs | depends_on [--flat | --unique] <packagename>
-      -- Packages that are dependent on the named package (as a tree).
-         The two options return a uniquified flat list instead of a tree
-         (suitable for outputting to other commands).
+      ixnay optimize | optimise
+      -- Replaces any duplicate files in the Nix store with hardlinks, saving space.
+         Note that you can set this up to be done on the fly via a config file option.
 
-      ixnay valid[ate] <packagename>
-      -- Thoroughly checks that all the files belonging to the package are valid.
+      ixnay clean | c | gc | garbage-collect | collect-garbage | purge
+      -- Delete all unreachable paths in the Nix store (anything that nothing active
+         is currently referencing), freeing up space.
 
-      ixnay unlock
-      -- Unlocks the package lock, in the event it was inadvertently left locked. May require sudo.
-         Make sure there isn't another package update running in another terminal!
+      ixnay validate | valid | check | verify
+      -- Validates the current contents of the Nix store.
 
-      ixnay doc[tor]
-      -- Checks various things in the package system to identify discrepancies.
-      Probably incomplete, happy to take PR's to improve this.
+      ixnay repair | doc | doctor
+      -- Validates AND repairs the current contents of the Nix store.
+
+      ixnay <anything else not recognized, or nothing>
+      -- Prints out the help you see here!
 EOF
 }
 
@@ -129,9 +203,45 @@ ixnay() {
       shift;
       nix-channel --update "$1"
       ;;
-    reify)
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade"
-      sudo nixos-rebuild switch --upgrade
+    reify | realize)
+      shift;
+      case $1 in
+        no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here)
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch"
+          sudo nixos-rebuild switch
+          ;;
+        *)
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade"
+          sudo nixos-rebuild switch --upgrade
+          ;;
+      esac
+      ;;
+    # 'see' usage examples:
+    # ixnay see mop run # downloads, installs and runs mop. assumes package & executable name are identical
+    # ixnay see mop # downloads and installs mop and makes it available in a new shell it drops you into
+    # ixnay see mop run mopper <args> # downloads & installs mop package, but runs it with a different name and args
+    see)
+      shift;
+      case $2 in
+        run)
+          case $3 in
+            "")
+              [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $1 --run $1"
+              nix-shell -p $1 --run $1
+              ;;
+            *)
+              local app="$1"
+              shift; shift;
+              [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $app --run \"$*\""
+              nix-shell -p $app --run "$*"
+              ;;
+          esac
+          ;;
+        *)
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $1"
+          nix-shell -p $1
+          ;;
+      esac
       ;;
     install | i)
       case $2 in
@@ -240,10 +350,14 @@ ixnay() {
       # esac
       # ;;
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix search $*"
-      nix search $*
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix search nixpkgs $*"
+      nix search nixpkgs $*
       ;;
-    clean | c | gc | purge)
+    optimize | optimise)
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix store optimise"
+      nix store optimise
+      ;;
+    clean | c | gc | garbage-collect | collect-garbage | purge)
       # needs paccache provided by pacman-contrib
       # echo "Cleaning all cached package data for uninstalled packages."
       # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "paccache -ruk0"
@@ -334,12 +448,12 @@ ixnay() {
     #       ;;
     #   esac
     #   ;;
-    validate | valid | check)
+    validate | valid | check | verify)
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store --verify --check-contents"
       nix-store --verify --check-contents
       ;;
-    repair)
+    repair | doc | doctor)
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store --verify --check-contents --repair"
       nix-store --verify --check-contents --repair
