@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# "I just want the real path to the directory that contains this script,
+# no matter where it's run from" ends up just being a hideous question
+# with many possible answers:
+# see: https://stackoverflow.com/questions/59895/how-do-i-get-the-directory-where-a-bash-script-is-located-from-within-the-script/68056148
+whereami=`dirname "$(realpath "${BASH_SOURCE[0]}")"`
+# pushd $whereami; pwd; popd
+echo "This will symlink ixnay from here into your \$XDG_BIN_HOME, which is: $XDG_BIN_HOME"
+ln -si $whereami/ixnay $XDG_BIN_HOME/
