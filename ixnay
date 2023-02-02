@@ -27,80 +27,6 @@ echo_yellow() {
 # Note: May need to run as sudo for some ops. See note below.
 
 _ixnay_help() {
-#   cat << EOF
-# Are you a Nix noob?
-# I have a possible solution! IXNAY! A sane wrapper for ixnay-shell etc
-
-# Configuration:
-#       Set IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the underlying command it will run before it runs it.
-
-# Usage: 
-#       ixnay install | i | upgrade | update | up | system_upgrade | su [--force-refresh] [<packagename>]
-#       -- These are all essentially synonyms.
-#          Updates the local package db, upgrades local packages, then optionally installs a package.
-#          For the reasons why you shouldn't update the local package db without also upgrading all packages,
-#          and why you shouldn't install anything new without first doing the above, see the arch docs.
-#          --force-refresh forces a sync update across all repos and forces reinstalls on any installation
-#          (normally, anything already installed is skipped).
-
-#       ixnay uninstall | u | remove | r [--orphaned | --gone] [<packagename>]
-#       -- Uninstalls a package and removes any dependencies that aren't needed by something else (but non-aggressively).
-#          --orphaned uninstalls any deps not needed by anything which might have been missed.
-#          --gone uninstalls any deps which aren't listed in any known repos (note: may include manually-installed packages!)
-
-#       ixnay orphaned | o
-#       -- List any orphaned deps.
-
-#       ixnay list | l
-#       -- List locally-installed packages.
-
-#       ixnay inspect | info <packagename>
-#       -- Prints out detailed information about a package.
-
-#       ixnay files <packagename>
-#       -- What files WOULD this package install?
-
-#       ixnay owns <path/to/file>
-#       -- What package owns this file? (Can also name any executable in PATH.)
-
-#       ixnay search | s | query | q | find | f [--local | --remote] <expression>
-#       -- Searches package names and descriptions with an expression which can be a regex.
-#          --local searches the local package db, --remote searches the remote db.
-#          Default is --remote.
-
-#       ixnay clean | c | purge
-#       -- Cleans out all cached or partially-downloaded data.
-
-#       ixnay outdated | stale
-#       -- Returns a list of local packages which have a newer remote version.
-#          NOTE: Unlike the naïve solution, this does NOT update the main local package db first!
-#          (Which was very important to keep things in sync. Rolling distro, and all that.)
-
-#       ixnay deptree <packagename>
-#       -- Print out a dependency tree for both the packages this package depends on,
-#          and the other packages dependent on it.
-
-#       ixnay needed_by | deps [--flat | --unique] <packagename>
-#       -- Packages that the named package depends on (as a tree).
-#          The two options return a uniquified flat list instead of a tree
-#          (suitable for outputting to other commands).
-
-#       ixnay needs | depends_on [--flat | --unique] <packagename>
-#       -- Packages that are dependent on the named package (as a tree).
-#          The two options return a uniquified flat list instead of a tree
-#          (suitable for outputting to other commands).
-
-#       ixnay valid[ate] <packagename>
-#       -- Thoroughly checks that all the files belonging to the package are valid.
-
-#       ixnay unlock
-#       -- Unlocks the package lock, in the event it was inadvertently left locked. May require sudo.
-#          Make sure there isn't another package update running in another terminal!
-
-#       ixnay doc[tor]
-#       -- Checks various things in the package system to identify discrepancies.
-#       Probably incomplete, happy to take PR's to improve this.
-# EOF
   cat << EOF
 Are you a Nix noob?
 I have a possible solution! IXNAY! A sane wrapper for nix-shell and friends, etc.
@@ -154,9 +80,13 @@ Usage:
       ixnay list | l [<filter>]
       -- List packages that are locally-installed in your profile, optionally with a filter.
 
-      ixnay search | s | query | q | find | f <pattern>
-      -- Searches all available packages in nixpkgs (downloading its DB first, if necessary)
-         for a pattern.
+      ixnay locate | find | f <package-name>
+      -- Locate an available package named <package-name>. It will return any names and versions
+         across all channels, or suggest possibilities if spelled wrong or incomplete.
+
+      ixnay search | s | query | q <pattern>
+      -- Searches all available packages, and their descriptions, in nixpkgs (downloading its DB first,
+         if necessary) for a pattern, which may be a regex. Multiple patterns are AND'ed.
 
       ixnay optimize | optimise
       -- Replaces any duplicate files in the Nix store with hardlinks, saving space.
@@ -203,7 +133,7 @@ ixnay() {
       shift;
       nix-channel --update "$1"
       ;;
-    reify | realize)
+    reify | realize | apply)
       shift;
       case $1 in
         no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here)
@@ -244,12 +174,9 @@ ixnay() {
       esac
       ;;
     install | i)
+      echo_yellow "Note: It is recommended to add a package to your global 'packages' config declaratively,"
+      echo_yellow "instead of installing it into your profile."
       case $2 in
-        # "--force-refresh" | "-f")
-        #   shift; shift;
-        #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Syyuu $*"
-        #   $NIX_COMMAND -Syyuu $*
-        #   ;;
         *)
           shift;
           IFS="." read -r chan pack <<< "$1"
@@ -268,22 +195,6 @@ ixnay() {
       ;;
     uninstall | u)
       case $2 in
-        # "--orphaned" | "--orphans" | "-o")
-        #   if [ $($NIX_COMMAND -Qdtq) ]; then
-        #     [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Qdtq | $NIX_COMMAND -Rns -"
-        #     $NIX_COMMAND -Qdtq | $NIX_COMMAND -Rns -
-        #   else
-        #     echo "No orphaned packages found."
-        #   fi
-        #   ;;
-        # "--gone") # packages that are in no known repositories
-        #   if [ $($NIX_COMMAND -Qmq) ]; then
-        #     [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Qmq | $NIX_COMMAND -Rns -"
-        #     $NIX_COMMAND -Qmq | $NIX_COMMAND -Rns -
-        #   else
-        #     echo "No installed packages found that are currently nonexistent in known repositories."
-        #   fi
-        #   ;;
         *)
           shift;
           [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -e $*"
@@ -300,14 +211,6 @@ ixnay() {
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND --rollback"
       $NIX_COMMAND --rollback
       ;;
-    # orphaned | orphans | o)
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Qdt"
-    #   $NIX_COMMAND -Qdt || echo "No orphaned packages found."
-    #   ;;
-    # gone)
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Qmq"
-    #   $NIX_COMMAND -Qmq || echo "No installed packages found that are currently nonexistent in known repositories."
-    #   ;;
     list | l) # local explicitly installed packages
       shift;
       searchterm=${1:-\*}
@@ -315,40 +218,12 @@ ixnay() {
       shift;
       $NIX_COMMAND --query "$searchterm"
       ;;
-    # inspect | info)
-    #   shift;
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Qii $*"
-    #   $NIX_COMMAND -Qii $*
-    #   ;;
-    # files) # what files will this package install?
-    #   shift;
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Ql $*"
-    #   $NIX_COMMAND -Ql $*
-    #   ;;
-    # owns) # what package owns this file (given a path)?
-    #   shift;
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Qo $*"
-    #   $NIX_COMMAND -Qo $*
-    #   ;;
+    locate | find | f)
+      shift;
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-env -qaP $*"
+      nix-env -qaP $*
+      ;;
     search | s | query | q | find | f) # can be a regexp! Multiple clauses are AND'ed.
-      # case $2 in
-      #   "--local" | "-l")
-      #     shift; shift;
-      #     [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Qs $*"
-      #     $NIX_COMMAND -Qs $*
-      #     ;;
-      #   "--remote" | "-r")
-      #     shift; shift;
-      #     [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Ss $*"
-      #     $NIX_COMMAND -Ss $*
-      #     ;;
-      #   *) # default to remote
-      #     shift;
-      #     [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Ss $*"
-      #     $NIX_COMMAND -Ss $*
-      #     ;;
-      # esac
-      # ;;
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix search nixpkgs $*"
       nix search nixpkgs $*
@@ -358,96 +233,9 @@ ixnay() {
       nix store optimise
       ;;
     clean | c | gc | garbage-collect | collect-garbage | purge)
-      # needs paccache provided by pacman-contrib
-      # echo "Cleaning all cached package data for uninstalled packages."
-      # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "paccache -ruk0"
-      # paccache -ruk0
-      # echo "Cleaning all cached package data for installed packages except for the most recent old version."
-      # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "paccache -rk1"
-      # paccache -rk1
-      # echo "Removing any partially-downloaded packages."
-      # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "find /var/cache/pacman/pkg/ -iname \"*.part\" -delete"
-      # find /var/cache/pacman/pkg/ -iname "*.part" -delete
-      # echo "Cleaning unused sync db."
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-collect-garbage"
       nix-collect-garbage
       ;;
-    # outdated | stale)
-    #   # note: this is SAFE in that it does NOT update the main local package db to get this information,
-    #   # thus avoiding the warnings mentioned above.
-    #   # Also, this currently doesn't return a particular exit code if there aren't any updates,
-    #   # but the underlying "checkupdates" (as well as checkupdates+aur BUT NOT checkupdates-aur), does exit 2.
-    #   # Should it?
-    #   if [ "${PAC_USE_AUR}" ]; then
-    #     needs checkupdates+aur from the AUR
-    #   else
-    #     needs checkupdates provided by pacman-contrib
-    #   fi
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow $CHECKUPDATES_COMMAND
-    #   # This causes it to also ignore ignored packages or groups (pacman and yay already ignore them when updating).
-    #   # Basically, I convert the list of ignore names into a regex that then gets used as a grep -v (exclusion) filter.
-    #   local ignored_pkgs=`egrep '^Ignore(Pkg|Group) *=' /etc/pacman.conf | awk '{for(i=3;i<=NF;++i)print $i}' | sort`
-    #   local checked_updates=`$CHECKUPDATES_COMMAND | sort`
-    #   if [ "$ignored_pkgs" ]; then
-    #     local ignored_pkgs_to_regex=`echo -e "$ignored_pkgs" | xargs | sed -E 's/[[:space:]]+/\|/g'`
-    #   else
-    #     local ignored_pkgs_to_regex=""
-    #   fi
-    #   if [ "${ignored_pkgs_to_regex}" ]; then
-    #     ignored_pkgs_to_regex="^($ignored_pkgs_to_regex)"
-    #   fi
-    #   local update_filter="${ignored_pkgs_to_regex}"
-    #   if [ "$update_filter" ]; then
-    #     local filtered_updates=`echo -en "$checked_updates" | egrep -v "$update_filter" -`
-    #   else
-    #     local filtered_updates="$checked_updates"
-    #   fi
-    #   # update_list=`comm -23 <($CHECKUPDATES_COMMAND | awk '{print $1}' | sort) <(egrep '^Ignore(Pkg|Group) *=' /etc/pacman.conf | awk '{for(i=3;i<=NF;++i)print $i}' | sort)`
-    #   { [ "$filtered_updates" ] && echo "$filtered_updates"; } || echo "Up to date."
-    #   ;;
-    # deptree)
-    #   needs pactree provided by pacman-contrib
-    #   shift;
-    #   echo "Packages that the named package depends on:"
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "pactree $*"
-    #   pactree $*
-    #   echo
-    #   echo "Packages that depend on the named package:"
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "pactree -r $*"
-    #   pactree -r $*
-    #   ;;
-    # needed_by | deps)
-    #   needs pactree provided by pacman-contrib
-    #   case $2 in
-    #     "--flat" | "--unique")
-    #       shift; shift;
-    #       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "pactree -u $*"
-    #       pactree -u $*
-    #       ;;
-    #     *) # default to tree
-    #       echo "Packages that the named package depends on:"
-    #       shift;
-    #       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "pactree $*"
-    #       pactree $*
-    #       ;;
-    #   esac
-    #   ;;
-    # needs | depends_on)
-    #   needs pactree provided by pacman-contrib
-    #   case $2 in
-    #     "--flat" | "--unique")
-    #       shift; shift;
-    #       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "pactree -ru $*"
-    #       pactree -ru $*
-    #       ;;
-    #     *) # default to tree
-    #       echo "Packages that depend on the named package:"
-    #       shift;
-    #       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "pactree -r $*"
-    #       pactree -r $*
-    #       ;;
-    #   esac
-    #   ;;
     validate | valid | check | verify)
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store --verify --check-contents"
@@ -458,18 +246,6 @@ ixnay() {
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store --verify --check-contents --repair"
       nix-store --verify --check-contents --repair
       ;;
-    # unlock)
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "rm /var/lib/pacman/db.lck"
-    #   rm /var/lib/pacman/db.lck || echo "The pacman package DB is NOT locked! (or you need to sudo)"
-    #   ;;
-    # doctor | doc)
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Dkk"
-    #   $NIX_COMMAND -Dkk
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -Qkk | grep -v ' 0 altered files'"
-    #   $NIX_COMMAND -Qkk | grep -v ' 0 altered files'
-    #   [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "[ -f /var/lib/pacman/db.lck ]"
-    #   [ -f /var/lib/pacman/db.lck ] && echo "The pacman package DB is locked. If you're not currently running pac/pacman, run 'sudo pac unlock'."
-    #   ;;
     *)
       _ixnay_help
       ;;
