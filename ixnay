@@ -4,250 +4,385 @@
 # IXNAY: A Saner Nix TUI #
 ##########################
 
-# graceful dependency enforcement
-# Usage: needs <executable> [provided by <packagename> or explain how to get it here]
-needs() {
-  local bin=$1
-  shift
-  command -v $bin >/dev/null 2>&1 || { echo >&2 "I require $bin but it's not installed or in PATH; $*"; return 1; }
-}
-
-# ANSI coloring
-# Color constants
-export ANSI="\033["
-export TXTRED='0;31m' # Red
-export TXTYLW='0;33m' # Yellow
-export TXTGRN='0;32m' # Green
-export TXTRST='0m'    # Text Reset, disable coloring
-echo_yellow() {
-  echo -e "${ANSI}${TXTYLW}${1}${ANSI}${TXTRST}"
-}
-
 # Nix has a terrible UI/UX, so...
 # Note: May need to run as sudo for some ops. See note below.
+# Second note: Now assumes flakes are enabled
 
-_ixnay_help() {
-  cat << EOF
-Are you a Nix noob?
-I have a possible solution! IXNAY! A sane wrapper for nix-shell and friends, etc.
-
-Configuration:
-      Set IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the underlying command it will run before it runs it.
-
-Usage:
-      ixnay channels
-      -- Lists nix channels. Lists global channels if sudo'd in a multiuser setup.
-
-      ixnay add-channel | add <channelname> <url>
-      -- Adds channel <channelname> via <url>.
-
-      ixnay remove-channel | remove <channelname>
-      -- Removes channel <channelname>.
-
-      ixnay sync <channelname>
-      -- Does a channel update from the Internet, or leave blank for all channels.
-
-      ixnay reify | realize [no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here]
-      -- Reads the config files, sets up the new config, switches to the new config,
-         optionally doesn't update from the Internet.
-
-      ixnay see <packagename> [run [<execname> [<args>]]]
-      -- Downloads <packagename>, makes it available in a new shell, optionally runs it
-         while either assuming the executable has the same name as the packagename
-         or using a different executable name, with optional arguments passed to it.
-         Fun example: ixnay see sl run
-
-      ixnay install | i [<channelname>.]<packagename>
-      -- Imperatively installs a package into your profile.
-         If no channel name is specified, use the defaults.
-         Note: This is not a recommended use of Nix because it is not declarative,
-         but it works for people new to Nix who are used to thinking in this way,
-         and it will be preserved from being garbage-collected (but you will lose it
-         if your system dies and you neither have a backup nor have it declaratively
-         named in a configuration file you source-control... which is why the latter
-         is recommended!)
-
-      ixnay uninstall | u <packagename>
-      -- Imperatively uninstalls a package from your profile.
-         See the caveats/suggestions above for "ixnay install".
-
-      ixnay update | upgrade | u
-      -- Updates the channels and upgrades any installed packages.
-
-      ixnay rollback | rb
-      -- Undoes the last store change.
-
-      ixnay list | l [<filter>]
-      -- List packages that are locally-installed in your profile, optionally with a filter.
-
-      ixnay locate | find | f <package-name>
-      -- Locate an available package named <package-name>. It will return any names and versions
-         across all channels, or suggest possibilities if spelled wrong or incomplete.
-
-      ixnay search | s | query | q <pattern>
-      -- Searches all available packages, and their descriptions, in nixpkgs (downloading its DB first,
-         if necessary) for a pattern, which may be a regex. Multiple patterns are AND'ed.
-
-      ixnay optimize | optimise
-      -- Replaces any duplicate files in the Nix store with hardlinks, saving space.
-         Note that you can set this up to be done on the fly via a config file option.
-
-      ixnay clean | c | gc | garbage-collect | collect-garbage | purge
-      -- Delete all unreachable paths in the Nix store (anything that nothing active
-         is currently referencing), freeing up space.
-
-      ixnay validate | valid | check | verify
-      -- Validates the current contents of the Nix store.
-
-      ixnay repair | doc | doctor
-      -- Validates AND repairs the current contents of the Nix store.
-
-      ixnay <anything else not recognized, or nothing>
-      -- Prints out the help you see here!
-EOF
-}
+#help Are you a Nix noob?
+#help I have a possible solution! IXNAY! A sane wrapper for nix-shell, nix and friends, etc.
+#help Configuration:
+#help    Set IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the 
+#help    underlying command it will run before it runs it.
+#help
+#help Usage: ixnay <command> [<args>] [<options>]
 
 ixnay() {
-  local NIX_COMMAND=${NIX_COMMAND:-nix-env}
+  # ANSI coloring
+  # Color constants
+  local ANSI="\033["
+  # local TXTRED='0;31m' # Red
+  local TXTYLW='0;33m' # Yellow
+  # local TXTGRN='0;32m' # Green
+  local TXTRST='0m'    # Text Reset, disable coloring
+  function echo_yellow() {
+    echo -e "${ANSI}${TXTYLW}${1}${ANSI}${TXTRST}" >&2
+  }
+  # graceful dependency enforcement
+  # Usage: needs <executable> [provided by <packagename> or explain how to get it here]
+  needs() {
+    local bin=$1
+    shift
+    # shellcheck disable=SC2086
+    command -v $bin >/dev/null 2>&1 || { echo >&2 "I require $bin but it's not installed or in PATH; $*"; return 1; }
+  }
+  function _ixnay_help() {
+    awk '
+      BEGIN { 
+        if (!("platform" in PROCINFO)) {
+          print "Please run this script with GNU awk (gawk) earliest in your PATH.";
+          exit 1
+        }
+      }
+      /^\x20*#help / {
+        sub(/^\x20+/, "", $0)
+        print substr($0, 7)
+        next
+      }
+      /#nodoc$/ { next }
+      /^\x20+(""|\*|(-?\\?[a-zA-Z\?]|(--)?[a-zA-Z0-9\-_]{2,})(\x20\|\x20(-?\\?[a-zA-Z\?]|(--)?[a-zA-Z0-9\-_]{2,}))*\x20?)\)/ {
+        sub(/^\x20+/,"", $0)
+        sub(/^\*\)/,"<arg>", $0)
+        sub(/^""/,"", $0)
+        sub(/\)\x20+#args\x20+/," ", $0)
+        sub(/\)\x20+#.*$/,"", $0)
+        sub(/\)\x20*$/,"", $0)
+        sub(/^\x20*/,"", $0)
+        print ""
+        print "ixnay " $0
+      }
+    ' "$0"
+  }
+  local NIX_COMMAND=${NIX_COMMAND:-nix}
   case $NIX_COMMAND in
-    nix-env)
+    nix-env) #nodoc
       needs nix-env it comes as part of nix
       needs nix-channel it comes as part of nix
       needs nix-store it comes as part of nix
-      needs nix it comes as part of nix
+      ;;
+    nix) #nodoc
+      needs nix it comes as part of nix with the flakes configuration turned on
       ;;
   esac
   case $1 in
+    help | --help | -h | -?)
+      #help -- The help you see here!
+      _ixnay_help
+      return 0
+      ;;
     channels)
+      #help -- Lists nix channels. Lists global channels if sudo'd in a multiuser setup.
+      #help    NOTE: Using Flakes instead of channels is advised.
+      echo_yellow "NOTE: Using Flakes instead of channels is advised."
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --list"
       nix-channel --list
       ;;
-    add-channel | add)
+    add-channel | add) #args <channelname> <url>
+      #help -- Adds channel <channelname> via <url>.
+      #help    NOTE: Using Flakes instead of channels is advised.
+      echo_yellow "NOTE: Using Flakes instead of channels is advised."
       shift;
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --add \"$2\" \"$1\""
       nix-channel --add "$2" "$1"
       ;;
-    remove-channel | remove)
+    remove-channel | remove) #args <channelname>
+      #help -- Removes channel <channelname>.
+      #help    NOTE: Using Flakes instead of channels is advised.
+      echo_yellow "NOTE: Using Flakes instead of channels is advised."
       shift;
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --remove \"$1\""
       nix-channel --remove "$1"
       ;;
-    sync)
+    sync) #args <channelname>
+      #help -- Updates channel <channelname> from the Internet; leave blank for all
+      #help    NOTE: Using Flakes instead of channels is advised.
+      echo_yellow "NOTE: Using Flakes instead of channels is advised."
       shift;
-      nix-channel --update "$1"
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update $1"
+      # shellcheck disable=SC2086
+      nix-channel --update $1
       ;;
-    reify | realize | apply)
-      shift;
-      case $1 in
-        no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here)
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch"
-          sudo nixos-rebuild switch
-          ;;
-        *)
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade"
-          sudo nixos-rebuild switch --upgrade
-          ;;
-      esac
+    reify | realize | apply) #args [no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here]
+      #help -- Reads the config files, sets up the new config, switches to the new config, optionally doesn't update from the Internet.
+      #help -- NixOS required currently. May work with nix-darwin in the future.
+      if [[ -v NIXOS ]]; then
+        shift;
+        case $1 in
+          no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch"
+            sudo nixos-rebuild switch
+            ;;
+          *) #nodoc
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade"
+            sudo nixos-rebuild switch --upgrade
+            ;;
+        esac
+      else
+        echo_yellow "This command applies an entire system configuration and thus requires NixOS. https://nixos.org/"
+        echo_yellow "(nix-darwin exists for macOS, but is not supported by ixnay yet.)"
+        return 2
+      fi
       ;;
-    # 'see' usage examples:
-    # ixnay see mop run # downloads, installs and runs mop. assumes package & executable name are identical
-    # ixnay see mop # downloads and installs mop and makes it available in a new shell it drops you into
-    # ixnay see mop run mopper <args> # downloads & installs mop package, but runs it with a different name and args
-    see)
+    see) #args <packagename> [run [<execname> [<args>]]]
+      #help -- Downloads and installs a package, optionally runs it, optionally with a different name
+      #help    (defaults to the same name as the package), optionally with arguments. Makes it available
+      #help    in your shell by modifying PATH.
+      #help    Some 'see' usage examples:
+      #help    ixnay see mop run # downloads, installs and runs mop. assumes package & executable name are identical
+      #help    ixnay see mop # downloads and installs mop and makes it available in your shell
+      #help    ixnay see mop run mopper [<args>] # downloads & installs mop package, but runs it with a different name and args
       shift;
       case $2 in
-        run)
+        run) #nodoc
           case $3 in
-            "")
+            "") #nodoc
               [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $1 --run $1"
+              # shellcheck disable=SC2086
               nix-shell -p $1 --run $1
               ;;
-            *)
+            *) #nodoc
               local app="$1"
               shift; shift;
               [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $app --run \"$*\""
+              # shellcheck disable=SC2086
               nix-shell -p $app --run "$*"
               ;;
           esac
           ;;
-        *)
+        *) #nodoc
           [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $1"
+          # shellcheck disable=SC2086
           nix-shell -p $1
           ;;
       esac
       ;;
-    install | i)
-      echo_yellow "Note: It is recommended to add a package to your global 'packages' config declaratively,"
-      echo_yellow "instead of installing it into your profile."
+    install | i) #args [<repo>#]<packagename>
+        #help -- Imperatively installs a package into your profile.
+        #help    If no repo name is specified, default to nixpkgs.
+        #help    Note: This is not a recommended use of NixOS because it is not declarative,
+        #help    but it works for people new to Nix or using the nix overlay install method,
+        #help    and it will be preserved from being garbage-collected (but you will lose it
+        #help    if your system dies and you neither have a backup nor have it declaratively
+        #help    named in a configuration file you source-control... which is why the former
+        #help    is recommended!)
+      if [[ -v NIXOS ]]; then
+        echo_yellow "Note: Since you're on NixOS, is recommended to add a package to your global 'packages' config declaratively,"
+        echo_yellow "instead of installing it into your profile."
+      fi
       case $2 in
-        *)
+        *) #nodoc
           shift;
-          IFS="." read -r chan pack <<< "$1"
+          IFS="#" read -r chan pack <<< "$1"
           # if the string is blank
           if [ -z "$pack" ]; then
             # no channel specified; use default
             pack="$chan"
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -i $pack"
-            $NIX_COMMAND -i $pack
-          else
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -iA ${chan}:${pack}"
-            $NIX_COMMAND -iA ${chan}:${pack}
+            chan="nixpkgs"
           fi
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile install ${chan}#${pack}"
+          # shellcheck disable=SC2086
+          $NIX_COMMAND profile install ${chan}#${pack}
           ;;
       esac
       ;;
-    uninstall | u)
-      case $2 in
-        *)
-          shift;
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND -e $*"
-          $NIX_COMMAND -e $*
-          ;;
-      esac
-      ;;
-    update | upgrade | u)
+    uninstall | un) #args <packagename>
+      #help -- Imperatively uninstalls a package from your profile.
+      #help    See the caveats/suggestions for "ixnay install".
+      if [[ -v NIXOS ]]; then
+        echo_yellow "Note: Since you're on NixOS, is recommended to remove a package from your global 'packages' config declaratively,"
+        echo_yellow "instead of uninstalling it from your profile."
+      fi
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update; $NIX_COMMAND --upgrade $*"
-      nix-channel --update; $NIX_COMMAND --upgrade $*
+      local package=$1
+      # Use awk to find all profile numbers with the given package name
+      # shellcheck disable=SC2155
+      local profile_numbers=$($NIX_COMMAND profile list | awk -v package="$package" '
+          BEGIN { FS = " "; }
+          $3 ~ package "$" { print $1; }
+      ')
+      # Check if any profile numbers were found
+      if [ -z "$profile_numbers" ]; then
+          echo "Package not found in the profile list: $package"
+          return 1
+      fi
+      # Run the desired nix profile action for each found profile number
+      for profile_number in $profile_numbers; do
+        [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix profile remove $profile_number"
+        # shellcheck disable=SC2048,SC2086
+        nix profile remove $profile_number
+      done
+      ;;
+    update | upgrade | up) #args [<packagename> | nix]
+      #help -- Imperatively upgrades a package in your profile.
+      #help    Or Nix itself if you specify 'nix'.
+      #help    Or all packages if none specified.
+      shift;
+      local package=$1
+      case $package in
+        nix) #nodoc
+          # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update"
+          # nix-channel --update
+          # OK so it turns out that "nix upgrade-nix" is currently broken
+          # so we will use a workaround just for this case
+          # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix upgrade-nix"
+          # nix upgrade-nix
+          # Record path to nix executable.
+          nix_binary_path=$(readlink -f "$(which nix)")
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "# the current nix binary path is: $nix_binary_path"
+          # Record index of nix installation in profile.
+          # shellcheck disable=SC2001
+          nix_profile_index=$(nix profile list | grep "$(echo "$nix_binary_path" | sed 's|^/nix/store/\([^/]*\)/.*$|\1|g')" | cut -d ' ' -f 1)
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "# its profile index is: $nix_profile_index"
+          # Remove the symbolic link to the nix executable.
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix profile remove $nix_profile_index"
+          # shellcheck disable=SC2086
+          nix profile remove $nix_profile_index
+          # Install the latest nix release.
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$nix_binary_path profile install nixpkgs#nix"
+          $nix_binary_path profile install nixpkgs#nix
+          # Display the new nix version.
+          echo_yellow "$(nix --version)"
+          ;;
+        "") #nodoc
+          # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update"
+          # nix-channel --update
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix profile upgrade '.*'"
+          nix profile upgrade '.*'
+          ;;
+        *) #nodoc
+          # Use awk to find all profile numbers with the given package name
+          # shellcheck disable=SC2155
+          local profile_numbers=$($NIX_COMMAND profile list | awk -v package="$package" '
+              BEGIN { FS = " "; }
+              $3 ~ package "$" { print $1; }
+          ') #nodoc
+          # Check if any profile numbers were found
+          if [ -z "$profile_numbers" ]; then
+              echo "Package not found in the profile list: $package"
+              return 1
+          fi
+          # Update the local repo state
+          # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update"
+          # nix-channel --update
+          # Run the desired nix profile action for each found profile number
+          for profile_number in $profile_numbers; do
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix profile upgrade $profile_number"
+            # shellcheck disable=SC2048,SC2086
+            nix profile upgrade $profile_number
+          done
+          ;;
+      esac
+      ;;
+    history)
+      #help -- Shows the history of your profile(s).
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile history"
+      $NIX_COMMAND profile history
       ;;
     rollback | rb)
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND --rollback"
-      $NIX_COMMAND --rollback
+      #help -- Rolls back your profile(s) to the previous generation.
+      #help    (Undoes the last profile change.)
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile rollback"
+      $NIX_COMMAND profile rollback
       ;;
-    list | l) # local explicitly installed packages
-      shift;
-      searchterm=${1:-\*}
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND --query \"$searchterm\""
-      shift;
-      $NIX_COMMAND --query "$searchterm"
+    list | l)
+      #help -- List local explicitly-installed packages
+      # Use awk to find all packages from the profile list
+      # shellcheck disable=SC2155
+      local packages=$($NIX_COMMAND profile list | awk '
+        BEGIN { FS = " "; }
+        /^[0|1] - -/ {
+          next
+        }
+        { 
+          sub(/([^\.]+\.)+/,"", $2)
+          print $2
+        }
+      ')
+      # Check if any profile numbers were found
+      if [ -z "$packages" ]; then
+        echo "There are no profile packages installed."
+        return 1
+      fi
+      # Print the packages, sorted and uniquified
+      echo -e "$packages" | tr ' ' '\n' | sort | uniq
       ;;
-    locate | find | f)
+    locate | find | f) #args <packagename>
+      #help -- Locate an available package installed locally. It will return any names and versions
+      #help    across all channels, or suggest possibilities if spelled wrong or incomplete.
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-env -qaP $*"
+      # shellcheck disable=SC2048,SC2086
       nix-env -qaP $*
       ;;
-    search | s | query | q | find | f) # can be a regexp! Multiple clauses are AND'ed.
+    search | s | query | q) #args <name_or_regex> [<name_or_regex> ...]
+      #help -- Searches all available packages, and their descriptions, in nixpkgs (downloading its DB first,
+      #help    if necessary) for a pattern, which may be a regex. Multiple patterns are AND'ed.
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix search nixpkgs $*"
+      # shellcheck disable=SC2048,SC2086
       nix search nixpkgs $*
       ;;
     optimize | optimise)
+      #help -- Replaces any duplicate files in the Nix store with hardlinks, saving space.
+      #help    Note that you can probably set this up to be done on a schedule via a config file option.
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix store optimise"
       nix store optimise
       ;;
     clean | c | gc | garbage-collect | collect-garbage | purge)
+      #help -- Delete all unreachable paths in the Nix store (anything that nothing active
+      #help    is currently referencing), freeing up space.
+      #help    Note that this should not include packages installed into a profile.
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-collect-garbage"
       nix-collect-garbage
       ;;
     validate | valid | check | verify)
-      shift;
+      #help -- Validates the current contents of the Nix store.
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store --verify --check-contents"
       nix-store --verify --check-contents
       ;;
     repair | doc | doctor)
-      shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store --verify --check-contents --repair"
-      nix-store --verify --check-contents --repair
+      #help -- Validates AND repairs the current contents of the Nix store.
+      #help    Also ensures you are using flakes if you are using nix profiles.
+      # verify nix profiles are configured to use flakes
+      if [ -z "$NIX_PROFILES" ]; then
+        echo "NIX_PROFILES is not set. Please set it to the right paths if you are using nix profiles."
+        echo "It is typically set to the following value, so setting it to this in your dotfiles may fix this:"
+        # echo "I will set it here temporarily:"
+        echo_yellow "export NIX_PROFILES=\"/nix/var/nix/profiles/default $HOME/.nix-profile\""
+        # export NIX_PROFILES="/nix/var/nix/profiles/default /Users/$USER/.nix-profile"
+      fi
+      # confirm that ~/.config/nix/nix.conf exists and contains flakes
+      if [ ! -f "$HOME/.config/nix/nix.conf" ]; then
+        echo "nix.conf does not exist. Please create it and add the following line to it:"
+        echo "experimental-features = nix-command flakes"
+        echo "You can do this by running the following command:"
+        echo_yellow "mkdir -p $HOME/.config/nix && echo \"experimental-features = nix-command flakes\" > $HOME/.config/nix/nix.conf"
+        # mkdir -p "$HOME/.config/nix" && echo "experimental-features = nix-command flakes" > "$HOME/.config/nix/nix.conf"
+      else
+        if ! grep -q "experimental-features = nix-command flakes" "$HOME/.config/nix/nix.conf"; then
+          echo "nix.conf exists but does not contain the flakes experimental feature. Please add the following line to it:"
+          echo "experimental-features = nix-command flakes"
+          echo "You can do this by running the following command:"
+          echo_yellow "echo \"experimental-features = nix-command flakes\" >> $HOME/.config/nix/nix.conf"
+          # echo "experimental-features = nix-command flakes" >> "$HOME/.config/nix/nix.conf"
+        fi
+      fi
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo -H nix-store --verify --check-contents --repair"
+      sudo -H nix-store --verify --check-contents --repair
       ;;
-    *)
+    "") #args [<nothing, or anything not understood>]
+      #help -- Prints this help message but returns 2 for bad usage
       _ixnay_help
+      return 2
       ;;
   esac
 }
@@ -255,7 +390,8 @@ ixnay() {
 # run the function, passing along any args, if this file was run directly (such as via sudo) instead of as an include
 # sometimes, $0 contains a leading dash to indicate an interactive (or is it login?) shell,
 # which is apparently an old convention (which also broke the basename call on OS X)
-me=$(basename ${0##\-})
+me=$(basename "${0##\-}")
 if [ "$me" = "ixnay" ]; then
+  # shellcheck disable=SC2048,SC2086
   ixnay $*
 fi
