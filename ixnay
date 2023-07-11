@@ -27,9 +27,22 @@ ixnay() {
   function echo_yellow() {
     echo -e "${ANSI}${TXTYLW}${1}${ANSI}${TXTRST}" >&2
   }
+  AWK=$(command -v gawk || command -v awk)
+  # distro detection
+  function distro() {
+    $AWK -F'=' '/^NAME=/{gsub(/"/, "", $2); print $2}' ${1:-/etc/os-release}
+  }
+  if [ "$(uname)" = "Darwin" ]; then
+    DISTRO="macos"
+  else # assume linux
+    # shellcheck disable=SC2034
+    DISTRO=$(distro)
+    # this downcase requires bash 4+; you can pipe to tr '[:upper:]' '[:lower:]' instead
+    DISTRO="${DISTRO,,}"
+  fi
   # graceful dependency enforcement
   # Usage: needs <executable> [provided by <packagename> or explain how to get it here]
-  needs() {
+  function needs() {
     local bin=$1
     shift
     # shellcheck disable=SC2086
@@ -114,7 +127,7 @@ ixnay() {
     reify | realize | apply) #args [no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here]
       #help -- Reads the config files, sets up the new config, switches to the new config, optionally doesn't update from the Internet.
       #help -- NixOS required currently. May work with nix-darwin in the future.
-      if [[ -v NIXOS ]]; then
+      if [ "$DISTRO" = "nixos" ]; then
         shift;
         case $1 in
           no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
