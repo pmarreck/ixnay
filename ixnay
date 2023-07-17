@@ -312,7 +312,7 @@ ixnay() {
       # shellcheck disable=SC2155
       local packages=$($NIX_COMMAND profile list | awk '
         BEGIN { FS = " "; }
-        /^[0|1] - -/ {
+        /^[0-9]{1,2} - -/ {
           next
         }
         { 
