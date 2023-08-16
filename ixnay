@@ -91,7 +91,7 @@ ixnay() {
       needs nix-store it comes as part of nix
       ;;
     nix) #nodoc
-      needs nix it comes as part of nix with the flakes configuration turned on
+      needs nix "it comes as part of nix with the \"experimental\" flakes configuration turned on"
       ;;
   esac
   case $1 in
@@ -132,9 +132,10 @@ ixnay() {
       # shellcheck disable=SC2086
       nix-channel --update $1
       ;;
-    reify | realize | apply) #args [no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here]
+    reify | realize | apply | rebuild) #args [no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here]
       #help -- Reads the config files, sets up the new config, switches to the new config, optionally doesn't update from the Internet.
       #help -- NixOS required currently. May work with nix-darwin in the future.
+      #help -- ("here" is a synonym for the other "no-upgrade" options.)
       if [ "$DISTRO" = "nixos" ]; then
         # rename the last logfile to its timestamp
         if [ -f "$LOGFILE" ]; then
@@ -146,12 +147,12 @@ ixnay() {
         shift;
         case $1 in
           no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch 2>&1 > \"$LOGFILE\" && cat \"$LOGFILE\""
-            sudo nixos-rebuild switch 2>&1 > "$LOGFILE" && cat "$LOGFILE"
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
+            sudo nixos-rebuild switch > "$LOGFILE" 2>&1; cat "$LOGFILE"
             ;;
           *) #nodoc
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade 2>&1 > \"$LOGFILE\" && cat \"$LOGFILE\""
-            sudo nixos-rebuild switch --upgrade 2>&1 > "$LOGFILE" && cat "$LOGFILE"
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
+            sudo nixos-rebuild switch --upgrade > "$LOGFILE" 2>&1; cat "$LOGFILE"
             ;;
         esac
       else
@@ -249,10 +250,17 @@ ixnay() {
         nix profile remove $profile_number
       done
       ;;
-    update | upgrade | up) #args [<packagename> | nix]
+    update | u)
+      #help -- Updates your channel(s) from the Internet.
+      #help    NOTE: Using Flakes instead of channels is advised.
+      echo_yellow "NOTE: Using Flakes instead of channels is advised."
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nix-channel --update"
+      sudo nix-channel --update
+      ;;
+    upgrade | up) #args [<packagename> | nix]
       #help -- Imperatively upgrades a package in your profile.
       #help    Or Nix itself if you specify 'nix'.
-      #help    Or all packages if none specified.
+      #help    Or all Nix packages if none specified.
       shift;
       local package=$1
       case $package in
