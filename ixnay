@@ -11,7 +11,7 @@
 #help Are you a Nix noob?
 #help I have a possible solution! IXNAY! A sane wrapper for nix-shell, nix and friends, etc.
 #help Configuration:
-#help    Set IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the 
+#help    Set IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the
 #help    underlying command it will run before it runs it.
 #help
 #help Usage: ixnay <command> [<args>] [<options>]
@@ -54,11 +54,12 @@ ixnay() {
   }
   # log location
   local XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
-  local LOGFILEDIR="${LOGFILEDIR:-$XDG_CACHE_HOME/ixnay}"
-  local LOGFILE="$LOGFILEDIR/last_reify.log"
+  local IXNAY_LOGFILEDIR="${IXNAY_LOGFILEDIR:-$XDG_CACHE_HOME/ixnay}"
+  local LOGFILE="$IXNAY_LOGFILEDIR/last_reify.log"
   function _ixnay_help() {
+    # this is some cleverness that extracts the inline help text from all the case options
     awk '
-      BEGIN { 
+      BEGIN {
         if (!("platform" in PROCINFO)) {
           print "Please run this script with GNU awk (gawk) earliest in your PATH.";
           exit 1
@@ -125,6 +126,7 @@ ixnay() {
       ;;
     sync) #args <channelname>
       #help -- Updates channel <channelname> from the Internet; leave blank for all
+      #help -- You may need to sudo this to update global channels (such as on NixOS).
       #help    NOTE: Using Flakes instead of channels is advised.
       echo_yellow "NOTE: Using Flakes instead of channels is advised."
       shift;
@@ -134,25 +136,33 @@ ixnay() {
       ;;
     reify | realize | apply | rebuild) #args [no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here]
       #help -- Reads the config files, sets up the new config, switches to the new config, optionally doesn't update from the Internet.
+      #help -- Also logs its output to IXNAY_LOGFILEDIR (defaults to $XDG_CACHE_HOME/ixnay), rotating it with a datetimestamp,
+      #help -- and then displays it.
       #help -- NixOS required currently. May work with nix-darwin in the future.
-      #help -- ("here" is a synonym for the other "no-upgrade" options.)
+      #help -- (The "here" arg is a synonym for the other "no-upgrade" options.)
       if [ "$DISTRO" = "nixos" ]; then
         # rename the last logfile to its timestamp
         if [ -f "$LOGFILE" ]; then
           local LOGFILE_TIMESTAMP=$(datetimestampfile "$LOGFILE")
-          mv "$LOGFILE" "$LOGFILEDIR/${LOGFILE_TIMESTAMP}_reify.log"
+          mv "$LOGFILE" "$IXNAY_LOGFILEDIR/${LOGFILE_TIMESTAMP}_reify.log"
         else
-          mkdir -p "$LOGFILEDIR"
+          mkdir -p "$IXNAY_LOGFILEDIR"
         fi
         shift;
         case $1 in
           no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
             [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
-            sudo nixos-rebuild switch > "$LOGFILE" 2>&1; cat "$LOGFILE"
+            sudo nixos-rebuild switch > "$LOGFILE" 2>&1
+            local retcode=$?
+            cat "$LOGFILE"
+            return $retcode
             ;;
           *) #nodoc
             [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
-            sudo nixos-rebuild switch --upgrade > "$LOGFILE" 2>&1; cat "$LOGFILE"
+            sudo nixos-rebuild switch --upgrade > "$LOGFILE" 2>&1
+            local retcode=$?
+            cat "$LOGFILE"
+            return $retcode
             ;;
         esac
       else
@@ -338,7 +348,7 @@ ixnay() {
         /^[0-9]{1,2} - -/ {
           next
         }
-        { 
+        {
           sub(/([^\.]+\.)+/,"", $2)
           print $2
         }
@@ -352,8 +362,11 @@ ixnay() {
       echo -e "$packages" | tr ' ' '\n' | sort | uniq
       ;;
     locate | find | f) #args <packagename>
-      #help -- Locate an available package installed locally. It will return any names and versions
-      #help    across all channels, or suggest possibilities if spelled wrong or incomplete.
+      #help -- Locate an available package. It will return any names and versions
+      #help    across all defined channels, or suggest possibilities if spelled wrong or incomplete.
+      #help    May take a while to complete because nix-env is kind of a slow hacky mess.
+      #help    NOTE: This uses nix-env and channels, which are essentially deprecated currently;
+      #help          it is suggested to use "search" instead.
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-env -qaP $*"
       # shellcheck disable=SC2048,SC2086
@@ -362,6 +375,7 @@ ixnay() {
     search | s | query | q) #args <name_or_regex> [<name_or_regex> ...]
       #help -- Searches all available packages, and their descriptions, in nixpkgs (downloading its DB first,
       #help    if necessary) for a pattern, which may be a regex. Multiple patterns are AND'ed.
+      #help    This uses "nix search" instead of nix-env.
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix search nixpkgs $*"
       # shellcheck disable=SC2048,SC2086
