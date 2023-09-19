@@ -17,6 +17,8 @@
 #help Usage: ixnay <command> [<args>] [<options>]
 
 ixnay() {
+  # editing via "edit ixnay"
+  [ -v EDIT ] && unset EDIT && edit_function "${FUNCNAME[0]}" "$BASH_SOURCE" && return
   # ANSI coloring
   # Color constants
   local ANSI="\033["
@@ -343,23 +345,21 @@ ixnay() {
       #help -- List local explicitly-installed packages
       # Use awk to find all packages from the profile list
       # shellcheck disable=SC2155
-      local packages=$($NIX_COMMAND profile list | awk '
-        BEGIN { FS = " "; }
-        /^[0-9]{1,2} - -/ {
-          next
-        }
-        {
-          sub(/([^\.]+\.)+/,"", $2)
-          print $2
-        }
+      local packages=$($NIX_COMMAND profile list | awk -F. '
+        /Flake attribute:/{ print $NF }
       ')
       # Check if any profile numbers were found
       if [ -z "$packages" ]; then
         echo "There are no profile packages installed."
-        return 1
+      else
+        echo "### Profile packages ###"
+        # Print the packages, sorted and uniquified
+        echo -e "$packages" | tr ' ' '\n' | sort | uniq
       fi
-      # Print the packages, sorted and uniquified
-      echo -e "$packages" | tr ' ' '\n' | sort | uniq
+      echo
+      echo "### System packages ###"
+      # this is a bit of a wonky way to get at this data, but it seems to work at least
+      needs nix-store && nix-store -q --tree /run/current-system | rg '^│   [├└]───' | awk -F/ '{ print $4 }' | awk -F' ' '{ print $1 }' | cut -c34- | sort -u
       ;;
     locate | find | f) #args <packagename>
       #help -- Locate an available package. It will return any names and versions
