@@ -60,7 +60,7 @@ ixnay() {
   local LOGFILE="$IXNAY_LOGFILEDIR/last_reify.log"
   function _ixnay_help() {
     # this is some cleverness that extracts the inline help text from all the case options
-    awk '
+    $AWK '
       BEGIN {
         if (!("platform" in PROCINFO)) {
           print "Please run this script with GNU awk (gawk) earliest in your PATH.";
@@ -246,9 +246,9 @@ ixnay() {
       local package=$1
       # Use awk to find all profile numbers with the given package name
       # shellcheck disable=SC2155
-      local profile_numbers=$($NIX_COMMAND profile list | awk -v package="$package" '
-          BEGIN { FS = " "; }
-          $3 ~ package "$" { print $1; }
+      local profile_numbers=$($NIX_COMMAND profile list | $AWK -v package="$package" '
+          BEGIN { RS="\n\n"; FS="(\n|: +)"; }
+          $0 ~ package "$" { printf "%s\n", $2; }
       ')
       # Check if any profile numbers were found
       if [ -z "$profile_numbers" ]; then
