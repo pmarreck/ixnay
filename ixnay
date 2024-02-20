@@ -246,6 +246,10 @@ ixnay() {
       local package=$1
       # Use awk to find all profile numbers with the given package name
       # shellcheck disable=SC2155
+      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile list | $AWK -v package=\"$package\" '
+          BEGIN { RS=\"\\n\\n\"; FS=\"(\\n|: +)\"; }
+          \$0 ~ package \"\$\" { printf \"%s\\n\", \$2; }
+      '"
       local profile_numbers=$($NIX_COMMAND profile list | $AWK -v package="$package" '
           BEGIN { RS="\n\n"; FS="(\n|: +)"; }
           $0 ~ package "$" { printf "%s\n", $2; }
