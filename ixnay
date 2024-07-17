@@ -13,6 +13,7 @@
 #help Configuration:
 #help    Set IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the
 #help    underlying command it will run before it runs it.
+#help    Set SWITCH_NOW env variable to switch to the new config now instead of requiring a reboot.
 #help
 #help Usage: ixnay <command> [<args>] [<options>]
 
@@ -58,6 +59,8 @@ ixnay() {
   local XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
   local IXNAY_LOGFILEDIR="${IXNAY_LOGFILEDIR:-$XDG_CACHE_HOME/ixnay}"
   local LOGFILE="$IXNAY_LOGFILEDIR/last_reify.log"
+  local SWITCH_OR_BOOT
+  [ -v SWITCH_NOW ] && SWITCH_OR_BOOT="switch" || SWITCH_OR_BOOT="boot"
   function _ixnay_help() {
     # this is some cleverness that extracts the inline help text from all the case options
     $AWK '
@@ -165,15 +168,15 @@ ixnay() {
         shift;
         case $1 in
           no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
-            sudo nixos-rebuild switch > "$LOGFILE" 2>&1
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild $SWITCH_OR_BOOT > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
+            sudo nixos-rebuild $SWITCH_OR_BOOT > "$LOGFILE" 2>&1
             local retcode=$?
             cat "$LOGFILE"
             return $retcode
             ;;
           *) #nodoc
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild switch --upgrade > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
-            sudo nixos-rebuild switch --upgrade > "$LOGFILE" 2>&1
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
+            sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade > "$LOGFILE" 2>&1
             local retcode=$?
             cat "$LOGFILE"
             return $retcode
