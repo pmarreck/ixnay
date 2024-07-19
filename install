@@ -7,4 +7,5 @@
 whereami=`dirname "$(realpath "${BASH_SOURCE[0]}")"`
 # pushd $whereami; pwd; popd
 echo "This will symlink ixnay from here into your \$XDG_BIN_HOME, which is: $XDG_BIN_HOME"
+mkdir -p $XDG_BIN_HOME
 ln -si $whereami/ixnay $XDG_BIN_HOME/
