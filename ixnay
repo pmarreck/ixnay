@@ -168,15 +168,15 @@ ixnay() {
         shift;
         case $1 in
           no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild $SWITCH_OR_BOOT > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
-            sudo nixos-rebuild $SWITCH_OR_BOOT > "$LOGFILE" 2>&1
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild $SWITCH_OR_BOOT 2>&1 | tee \"$LOGFILE\""
+            sudo nixos-rebuild $SWITCH_OR_BOOT 2>&1 | tee "$LOGFILE"
             local retcode=$?
             cat "$LOGFILE"
             return $retcode
             ;;
           *) #nodoc
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade > \"$LOGFILE\" 2>&1; cat \"$LOGFILE\""
-            sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade > "$LOGFILE" 2>&1
+            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade 2>&1 | tee \"$LOGFILE\""
+            sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade 2>&1 | tee "$LOGFILE"
             local retcode=$?
             cat "$LOGFILE"
             return $retcode
@@ -188,13 +188,14 @@ ixnay() {
         return 2
       fi
       ;;
-    see) #args <packagename> [run [<execname> [<args>]]]
+    see | try) #args <packagename> [run [<execname> [<args>]]]
       #help -- Downloads and installs a package, optionally runs it, optionally with a different name
       #help    (defaults to the same name as the package), optionally with arguments. Makes it available
       #help    in your shell by modifying PATH.
       #help    Some 'see' usage examples:
       #help    ixnay see mop run # downloads, installs and runs mop. assumes package & executable name are identical
       #help    ixnay see mop # downloads and installs mop and makes it available in your shell
+      #help    ixnay try mop # downloads & installs mop package temporarily
       #help    ixnay see mop run mopper [<args>] # downloads & installs mop package, but runs it with a different name and args
       shift;
       case $2 in
@@ -479,7 +480,7 @@ ixnay() {
       fi
       nix-store --verify --check-contents
       ;;
-    deps | dependencies)
+    deps | dependencies) #args <packagename>
       #help -- Lists all the dependencies of a package.
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store -q --references `which $1`"
@@ -490,7 +491,7 @@ ixnay() {
       # shellcheck disable=SC2048,SC2086
       nix-store -q --references `which $1`
       ;;
-    depends-on)
+    depends-on) #args <packagename>
       #help -- Lists all the packages that depend on a package.
       shift;
       [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store -q --referrers `which $1`"
