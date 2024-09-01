@@ -19,7 +19,7 @@
 
 ixnay() {
   # editing via "edit ixnay"
-  [ -v EDIT ] && unset EDIT && edit_function "${FUNCNAME[0]}" "$BASH_SOURCE" && return
+  [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "$BASH_SOURCE" && return
   # ANSI coloring
   # Color constants
   local ANSI="\033["
@@ -31,6 +31,10 @@ ixnay() {
     echo -e "${ANSI}${TXTYLW}${1}${ANSI}${TXTRST}" >&2
   }
   AWK=$(command -v gawk || command -v awk)
+  # if the path leads to awk instead of gawk, we warn the user
+  if [ "$(basename "$AWK")" = "awk" ]; then
+    echo_yellow "Warning: Using 'awk' instead of 'gawk'. Some features may not work as expected. Highly recommend installing 'gawk' instead."
+  fi
   # distro detection
   function distro() {
     $AWK -F'=' '/^NAME=/{gsub(/"/, "", $2); print $2}' ${1:-/etc/os-release}
@@ -53,14 +57,14 @@ ixnay() {
   }
   # datetimestamp of a file
   function datetimestampfile() {
-    stat -c '%y' "$1" | awk '{print $1$2}' | tr -d ':-' # | cut -d"." -f1 # to remove milliseconds
+    stat -c '%y' "$1" | $AWK '{print $1$2}' | tr -d ':-' # | cut -d"." -f1 # to remove milliseconds
   }
   # log location
   local XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
   local IXNAY_LOGFILEDIR="${IXNAY_LOGFILEDIR:-$XDG_CACHE_HOME/ixnay}"
   local LOGFILE="$IXNAY_LOGFILEDIR/last_reify.log"
   local SWITCH_OR_BOOT
-  [ -v SWITCH_NOW ] && SWITCH_OR_BOOT="switch" || SWITCH_OR_BOOT="boot"
+  [ -n "${SWITCH_NOW}" ] && SWITCH_OR_BOOT="switch" || SWITCH_OR_BOOT="boot"
   function _ixnay_help() {
     # this is some cleverness that extracts the inline help text from all the case options
     $AWK '
@@ -110,8 +114,8 @@ ixnay() {
       #help -- Lists nix channels. Lists global channels if sudo'd in a multiuser setup.
       #help    NOTE: Using Flakes instead of channels is advised.
       echo_yellow "NOTE: Using Flakes instead of channels is advised."
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --list"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-channel --list"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       nix-channel --list
@@ -121,8 +125,8 @@ ixnay() {
       #help    NOTE: Using Flakes instead of channels is advised.
       echo_yellow "NOTE: Using Flakes instead of channels is advised."
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --add \"$2\" \"$1\""
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-channel --add \"$2\" \"$1\""
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       nix-channel --add "$2" "$1"
@@ -132,8 +136,8 @@ ixnay() {
       #help    NOTE: Using Flakes instead of channels is advised.
       echo_yellow "NOTE: Using Flakes instead of channels is advised."
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --remove \"$1\""
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-channel --remove \"$1\""
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       nix-channel --remove "$1"
@@ -144,8 +148,8 @@ ixnay() {
       #help    NOTE: Using Flakes instead of channels is advised.
       echo_yellow "NOTE: Using Flakes instead of channels is advised."
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update $1"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-channel --update $1"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       # shellcheck disable=SC2086
@@ -202,8 +206,8 @@ ixnay() {
         run) #nodoc
           case $3 in
             "") #nodoc
-              [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $1 --run $1"
-              if [ -v DRY_RUN ]; then
+              [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-shell -p $1 --run $1"
+              if [ -n "${DRY_RUN}" ]; then
                 return 0
               fi
               # shellcheck disable=SC2086
@@ -212,8 +216,8 @@ ixnay() {
             *) #nodoc
               local app="$1"
               shift; shift;
-              [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $app --run \"$*\""
-              if [ -v DRY_RUN ]; then
+              [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-shell -p $app --run \"$*\""
+              if [ -n "${DRY_RUN}" ]; then
                 return 0
               fi
               # shellcheck disable=SC2086
@@ -222,7 +226,7 @@ ixnay() {
           esac
           ;;
         *) #nodoc
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-shell -p $1"
+          [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-shell -p $1"
           # shellcheck disable=SC2086
           nix-shell -p $1
           ;;
@@ -237,11 +241,17 @@ ixnay() {
         #help    if your system dies and you neither have a backup nor have it declaratively
         #help    named in a configuration file you source-control... which is why the former
         #help    is recommended!)
-      if [[ -v NIXOS ]]; then
+      if [ -n "${NIXOS}" ]; then
         echo_yellow "Note: Since you're on NixOS, is recommended to add a package to your global 'packages' config declaratively,"
         echo_yellow "instead of installing it into your profile."
       fi
       case $2 in
+        "")
+          # warn about the lack of an argument
+          echo_yellow "Warning: No package specified for installation."
+          echo_yellow "Usage: ixnay install <packagename>"
+          return 1
+          ;;
         unstable) #nodoc
           shift;
           IFS="#" read -r chan pack <<< "$2"
@@ -251,8 +261,8 @@ ixnay() {
             pack="$chan"
             chan="github:nixos/nixpkgs/nixos-unstable"
           fi
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile install ${chan}#${pack}"
-          if [ -v DRY_RUN ]; then
+          [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile install ${chan}#${pack}"
+          if [ -n "${DRY_RUN}" ]; then
             return 0
           fi
           # shellcheck disable=SC2086
@@ -267,8 +277,8 @@ ixnay() {
             pack="$chan"
             chan="nixpkgs"
           fi
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile install ${chan}#${pack}"
-          if [ -v DRY_RUN ]; then
+          [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile install ${chan}#${pack}"
+          if [ -n "${DRY_RUN}" ]; then
             return 0
           fi
           # shellcheck disable=SC2086
@@ -279,7 +289,7 @@ ixnay() {
     uninstall | un) #args <packagename>
       #help -- Imperatively uninstalls a package from your profile.
       #help    See the caveats/suggestions for "ixnay install".
-      if [[ -v NIXOS ]]; then
+      if [ -n "${NIXOS}" ]; then
         echo_yellow "Note: Since you're on NixOS, is recommended to remove a package from your global 'packages' config declaratively,"
         echo_yellow "instead of uninstalling it from your profile."
       fi
@@ -287,7 +297,7 @@ ixnay() {
       local package=$1
       # Use awk to find all profile numbers with the given package name
       # shellcheck disable=SC2155
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile list | $AWK -v package=\"$package\" '
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile list | $AWK -v package=\"$package\" '
           BEGIN { RS=\"\\\n\\\n\"; FS=\"(\\\n|: +)\"; }
           \$4 ~ package \"\$\" { printf \"%s\\\n\", \$2; }
       '"
@@ -302,8 +312,8 @@ ixnay() {
       fi
       # Run the desired nix profile action for each found profile number
       for profile_number in $profile_numbers; do
-        [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix profile remove $profile_number"
-        if [ -v DRY_RUN ]; then
+        [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix profile remove $profile_number"
+        if [ -n "${DRY_RUN}" ]; then
           break
         fi
         # shellcheck disable=SC2048,SC2086
@@ -314,86 +324,71 @@ ixnay() {
       #help -- Updates your channel(s) from the Internet.
       #help    NOTE: Using Flakes instead of channels is advised.
       echo_yellow "NOTE: Using Flakes instead of channels is advised."
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo nix-channel --update"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "sudo nix-channel --update"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       sudo nix-channel --update
       ;;
-    upgrade | up) #args [<packagename> | nix]
-      #help -- Imperatively upgrades a package in your profile.
-      #help    Or Nix itself if you specify 'nix'.
-      #help    Or all Nix packages if none specified.
+    upgrade | up) #args [<packagename>[ <packagename>]* | nix]
+      #help -- Imperatively upgrades a package(s) in your profile.
+      #help    Or Nix itself if you specify 'nix' by itself.
+      #help    Or all Nix profile-installed packages if none specified, or if you specify '--all'.
       shift;
-      local package=$1
-      case $package in
+      local packages="$*"
+      # set packages to "--all" if it is empty
+      [ -z "$packages" ] && packages="--all"
+      [ -v DEBUG ] && echo_yellow "DEBUG: packages is $packages"
+      case $packages in
         nix) #nodoc
-          # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update"
+          # [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-channel --update"
           # nix-channel --update
           # OK so it turns out that "nix upgrade-nix" is currently broken
           # so we will use a workaround just for this case
-          # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix upgrade-nix"
+          # [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix upgrade-nix"
           # nix upgrade-nix
           # Record path to nix executable.
-          nix_binary_path=$(readlink -f "$(which nix)")
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "# the current nix binary path is: $nix_binary_path"
-          # Record index of nix installation in profile.
-          # shellcheck disable=SC2001
-          nix_profile_index=$(nix profile list | grep "$(echo "$nix_binary_path" | sed 's|^/nix/store/\([^/]*\)/.*$|\1|g')" | cut -d ' ' -f 1)
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "# its profile index is: $nix_profile_index"
-          # Remove the symbolic link to the nix executable.
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix profile remove $nix_profile_index"
-          # shellcheck disable=SC2086
-          nix profile remove $nix_profile_index
-          # Install the latest nix release.
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$nix_binary_path profile install nixpkgs#nix"
-          if [ -v DRY_RUN ]; then
-            return 0
+          
+          # Using this hosed my Nix install due to having used the Determinate Nix Installer,
+          # which I had forgotten, so for now I will just warn about its existence
+          # and to follow its own instructions for upgrading Nix itself.
+          # (The original code that was here was deleted.)
+          if [ -f "/nix/receipt.json" ]; then
+            echo_yellow "Warning: You have used the Determinate Nix Installer. Please follow its instructions for upgrading Nix itself."
+            echo_yellow "You can find it at https://github.com/DeterminateSystems/nix-installer"
+            echo_yellow "This is likely \"sudo -i nix upgrade-nix\", but may have changed."
+            echo_yellow "The receipt file, which it uses to uninstall, is located at /nix/receipt.json"
           fi
-          $nix_binary_path profile install nixpkgs#nix
-          # Display the new nix version.
-          echo_yellow "$(nix --version)"
-          ;;
-        "") #nodoc
-          # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update"
-          # nix-channel --update
-          [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix profile upgrade '.*'"
-          if [ -v DRY_RUN ]; then
-            return 0
-          fi
-          nix profile upgrade '.*'
           ;;
         *) #nodoc
-          # Use awk to find all profile numbers with the given package name
-          # shellcheck disable=SC2155
-          local profile_numbers=$($NIX_COMMAND profile list | awk -v package="$package" '
-              BEGIN { FS = " "; }
-              $3 ~ package "$" { print $1; }
-          ') #nodoc
-          # Check if any profile numbers were found
-          if [ -z "$profile_numbers" ]; then
-              echo "Package not found in the profile list: $package"
-              return 1
+          # If the list of arguments contains "nix", remove it and warn the user about having to do it separately.
+          if [[ "$packages" =~ (^|[[:space:]])nix($|[[:space:]]) ]]; then
+            echo_yellow "Warning: You have specified 'nix' for upgrading. This must be done separately."
+            echo_yellow "Removing it from the list of packages to upgrade for now."
+            # Remove "nix" from the list of packages to upgrade.
+            packages=$(echo "$packages" | sed -E 's/(^|[[:space:]])nix($|[[:space:]])/ /g')
           fi
-          # Update the local repo state
-          # [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-channel --update"
-          # nix-channel --update
-          # Run the desired nix profile action for each found profile number
-          for profile_number in $profile_numbers; do
-            [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix profile upgrade $profile_number"
-            if [ -v DRY_RUN ]; then
-              break
-            fi
-            # shellcheck disable=SC2048,SC2086
-            nix profile upgrade $profile_number
-          done
+          [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix profile upgrade $packages"
+          if [ -n "${DRY_RUN}" ]; then
+            return 0
+          fi
+          # shellcheck disable=SC2048,SC2086
+          nix profile upgrade $packages
           ;;
       esac
       ;;
+    wipe-history)
+      #help -- Wipes the non-current history of your profile(s).
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile wipe-history"
+      if [ -n "${DRY_RUN}" ]; then
+        return 0
+      fi
+      $NIX_COMMAND profile wipe-history
+      ;;
     history)
       #help -- Shows the history of your profile(s).
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile history"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile history"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       $NIX_COMMAND profile history
@@ -401,8 +396,8 @@ ixnay() {
     rollback | rb)
       #help -- Rolls back your profile(s) to the previous generation.
       #help    (Undoes the last profile change.)
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "$NIX_COMMAND profile rollback"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile rollback"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       $NIX_COMMAND profile rollback
@@ -411,7 +406,7 @@ ixnay() {
       #help -- List local explicitly-installed packages
       # Use awk to find all packages from the profile list
       # shellcheck disable=SC2155
-      local packages=$($NIX_COMMAND profile list | awk -F. '
+      local packages=$($NIX_COMMAND profile list | $AWK -F. '
         /Flake attribute:/{ print $NF }
       ')
       # Check if any profile numbers were found
@@ -420,12 +415,17 @@ ixnay() {
       else
         echo "### Profile packages ###"
         # Print the packages, sorted and uniquified
-        echo -e "$packages" | tr ' ' '\n' | sort | uniq
+        echo -e "$packages" | tr ' ' '\n' | sort -u
       fi
       echo
       echo "### System packages ###"
       # this is a bit of a wonky way to get at this data, but it seems to work at least
-      needs nix-store && nix-store -q --tree /run/current-system | rg '^│   [├└]───' | awk -F/ '{ print $4 }' | awk -F' ' '{ print $1 }' | cut -c34- | sort -u
+      # check for running on nixos; otherwise there are no system packages and we error
+      if [ "$DISTRO" = "nixos" ]; then
+        nix-store -q --tree /run/current-system | rg '^│   [├└]───' | $AWK -F/ '{ print $4 }' | $AWK -F' ' '{ print $1 }' | cut -c34- | sort -u
+      else
+        echo_yellow "There are no system packages installed since this isn't NixOS."
+      fi
       ;;
     locate | find | f) #args <packagename>
       #help -- Locate an available package. It will return any names and versions
@@ -434,20 +434,23 @@ ixnay() {
       #help    NOTE: This uses nix-env and channels, which are essentially deprecated currently;
       #help          it is suggested to use "search" instead.
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-env -qaP $*"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-env -qaP $*"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       # shellcheck disable=SC2048,SC2086
       nix-env -qaP $*
+      if [ $? -ne 0 ]; then
+        echo_yellow "I see it errored. Locate/find not really recommended anymore. Try \`ixnay search\` instead."
+      fi
       ;;
     search | s | query | q) #args <name_or_regex> [<name_or_regex> ...]
       #help -- Searches all available packages, and their descriptions, in nixpkgs (downloading its DB first,
       #help    if necessary) for a pattern, which may be a regex. Multiple patterns are AND'ed.
       #help    This uses "nix search" instead of nix-env.
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix search nixpkgs $*"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix search nixpkgs $*"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       # shellcheck disable=SC2048,SC2086
@@ -456,8 +459,8 @@ ixnay() {
     optimize | optimise)
       #help -- Replaces any duplicate files in the Nix store with hardlinks, saving space.
       #help    Note that you can probably set this up to be done on a schedule via a config file option.
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix store optimise"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix store optimise"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       nix store optimise
@@ -466,16 +469,16 @@ ixnay() {
       #help -- Delete all unreachable paths in the Nix store (anything that nothing active
       #help    is currently referencing), freeing up space.
       #help    Note that this should not include packages installed into a profile.
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-collect-garbage"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-collect-garbage"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       nix-collect-garbage
       ;;
     validate | valid | check | verify)
       #help -- Validates the current contents of the Nix store.
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store --verify --check-contents"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-store --verify --check-contents"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       nix-store --verify --check-contents
@@ -483,19 +486,19 @@ ixnay() {
     deps | dependencies) #args <packagename>
       #help -- Lists all the dependencies of a package.
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store -q --references `which $1`"
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-store -q --references `which $1`"
       # nix-instantiate --eval --expr 'builtins.toJSON (import <nixos/nixos> {}).options.environment.systemPackages.definitionsWithLocations' --json | jq 'fromjson' -C
-      if [ -v DRY_RUN ]; then
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       # shellcheck disable=SC2048,SC2086
       nix-store -q --references `which $1`
       ;;
     depends-on) #args <packagename>
-      #help -- Lists all the packages that depend on a package.
+      #help -- Lists all the packages/derivations that depend on a package.
       shift;
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "nix-store -q --referrers `which $1`"
-      if [ -v DRY_RUN ]; then
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "nix-store -q --referrers `which $1`"
+      if [ -n "${DRY_RUN}" ]; then
         return 0
       fi
       # shellcheck disable=SC2048,SC2086
@@ -528,7 +531,7 @@ ixnay() {
           # echo "experimental-features = nix-command flakes" >> "$HOME/.config/nix/nix.conf"
         fi
       fi
-      [ "$IXNAY_MUTE_CMD_ECHO" ] || echo_yellow "sudo -H nix-store --verify --check-contents --repair"
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "sudo -H nix-store --verify --check-contents --repair"
       sudo -H nix-store --verify --check-contents --repair
       ;;
     "") #args [<nothing, or anything not understood>]
