@@ -259,30 +259,36 @@ ixnay() {
           if [ -z "$pack" ]; then
             # no channel specified; use default
             pack="$chan"
-            chan="github:nixos/nixpkgs/nixos-unstable"
+            chan="github:nixos/nixpkgs/nixos-unstable#"
           fi
-          [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile install ${chan}#${pack}"
+          [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile install ${chan}${pack}"
           if [ -n "${DRY_RUN}" ]; then
             return 0
           fi
           # shellcheck disable=SC2086
-          $NIX_COMMAND profile install ${chan}#${pack}
+          $NIX_COMMAND profile install ${chan}${pack}
           ;;
         *) #nodoc
           shift;
           IFS="#" read -r chan pack <<< "$1"
-          # if the string is blank
+          # if the pack is blank
           if [ -z "$pack" ]; then
-            # no channel specified; use default
-            pack="$chan"
-            chan="nixpkgs"
+            # if it starts with "git[a-z]{0,5}:", just use it as the channel and package name combination
+            if [[ "$1" =~ ^git[a-z]{0,5}: ]]; then
+              pack="$1"
+              chan=""
+            else
+              # no known channel specified; use default
+              pack="$chan"
+              chan="nixpkgs#"
+            fi
           fi
-          [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile install ${chan}#${pack}"
+          [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || echo_yellow "$NIX_COMMAND profile install ${chan}${pack}"
           if [ -n "${DRY_RUN}" ]; then
             return 0
           fi
           # shellcheck disable=SC2086
-          $NIX_COMMAND profile install ${chan}#${pack}
+          $NIX_COMMAND profile install ${chan}${pack}
           ;;
       esac
       ;;
