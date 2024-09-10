@@ -189,7 +189,7 @@ ixnay() {
         print ""
         print "ixnay " $0
       }
-    ' "$0"
+    ' "$BASH_SOURCE"
   }
   local NIX_COMMAND=${NIX_COMMAND:-nix}
   case $NIX_COMMAND in
@@ -365,7 +365,7 @@ ixnay() {
           fi
           # map over all $*, prefixing each with either "nixpkgs#" or "github:nixos/nixpkgs/nixos-unstable#" as necessary
           local packages=""
-          for pack in "$*"; do
+          for pack in "$@"; do
             # check to make sure we do not have a channel or git url in the package name; error if unstable was specified,
             # otherwise just use the entire package name as-is and do not prefix it with the channel
             if [[ "$pack" =~ ^(git[a-z]{0,5}|https?): || "$pack" =~ '#' ]]; then
