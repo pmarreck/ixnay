@@ -263,21 +263,29 @@ ixnay() {
           fi
         fi
         shift;
+        local success=0;
         case $1 in
           no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
             [ "$IXNAY_MUTE_CMD_ECHO" ] || caution "sudo nixos-rebuild $SWITCH_OR_BOOT 2>&1 | tee \"$LOGFILE\""
             [ -n "${DRY_RUN}" ] && return 0
             sudo nixos-rebuild $SWITCH_OR_BOOT 2>&1 | tee "$LOGFILE"
+            success="$?"
             ;;
           *) #nodoc
             [ "$IXNAY_MUTE_CMD_ECHO" ] || caution "sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade 2>&1 | tee \"$LOGFILE\""
             [ -n "${DRY_RUN}" ] && return 0
             sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade 2>&1 | tee "$LOGFILE"
+            success="$?"
             ;;
         esac
         # if SWITCH_OR_BOOT is "boot", recommend rebooting
-        if [ "$SWITCH_OR_BOOT" = "boot" ]; then
-          caution "Note: You may want to reboot now to finish switching to the new configuration."
+        # as long as no errors
+        if [ $success = "0" ]; then
+          if [ "$SWITCH_OR_BOOT" = "boot" ]; then
+            caution "Note: You may want to reboot now to finish switching to the new configuration."
+          fi
+        else
+          caution "There was an error when attempting to apply the new configuration; see traceback above."
         fi
       else
         caution "This command applies an entire system configuration and thus requires NixOS. https://nixos.org/"
@@ -459,7 +467,7 @@ ixnay() {
           # [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || caution "nix upgrade-nix"
           # nix upgrade-nix
           # Record path to nix executable.
-          
+
           # Using this hosed my Nix install due to having used the Determinate Nix Installer,
           # which I had forgotten, so for now I will just warn about its existence
           # and to follow its own instructions for upgrading Nix itself.
