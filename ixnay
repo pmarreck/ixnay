@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -o pipefail;
+
 ##########################
 # IXNAY: A Saner Nix TUI #
 ##########################
@@ -280,12 +282,13 @@ ixnay() {
         esac
         # if SWITCH_OR_BOOT is "boot", recommend rebooting
         # as long as no errors
-        if [ $success = "0" ]; then
+        if [ "$success" = "0" ]; then
           if [ "$SWITCH_OR_BOOT" = "boot" ]; then
             caution "Note: You may want to reboot now to finish switching to the new configuration."
           fi
         else
           caution "There was an error when attempting to apply the new configuration; see traceback above."
+          return $success
         fi
       else
         caution "This command applies an entire system configuration and thus requires NixOS. https://nixos.org/"
@@ -621,8 +624,9 @@ ixnay() {
       shift;
       [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || caution "nix search nixpkgs $*"
       [ -n "${DRY_RUN}" ] && return 0
+      # filter out anything that says "evaluation warning"
       # shellcheck disable=SC2048,SC2086
-      nix search nixpkgs $*
+      nix search nixpkgs $* 2>&1 | awk '!/evaluation warning|^evaluating/'
       ;;
     optimize | optimise)
       #help -- Replaces any duplicate files in the Nix store with hardlinks, saving space.
