@@ -10,15 +10,15 @@ set -o pipefail;
 # Note: May need to run as sudo for some ops. See note below.
 # Second note: Now assumes flakes are enabled
 
-#help Are you a Nix noob?
-#help I have a possible solution! IXNAY! A sane wrapper for nix-shell, nix and friends, etc.
-#help Configuration:
+#help IXNAY: A sane, beginner-friendly wrapper for nix-shell, nix and friends, etc.
+#help
+#help Environment Variable Configuration:
 #help    Set the IXNAY_MUTE_CMD_ECHO env variable to stop ixnay from printing out the
 #help    underlying command it will run before it runs it.
-#help    Set the SWITCH_NOW env variable with 'ixnay reify' to switch to the new config now instead of
-#help    requiring a reboot (I've found that especially for things like GPU driver updates, it's safer
-#help    to wait for a reboot, especially if you use Steam Proton for gaming, which will stay out-of-
-#help    sync until you reboot. So that is the default behavior.)
+#help    Set the SWITCH_NOW env variable in conjunction with 'ixnay reify' to switch to the new
+#help    config now instead of requiring a reboot (I've found that especially for things like GPU
+#help    driver updates, it's safer to wait for a reboot, especially if you use Steam Proton
+#help    for gaming, which will stay out-of-sync until you reboot. So that is the default behavior.)
 #help    Set the DRY_RUN env variable to see the underlying command ixnay would run
 #help    without actually running the command.
 #help
@@ -134,7 +134,7 @@ ixnay() {
   AWK=$(command -v gawk || command -v awk)
   # if the path leads to awk instead of gawk, we warn the user
   if [ "$(basename "$AWK")" = "awk" ]; then
-    caution "Warning: Using 'awk' instead of 'gawk'. Some features may not work as expected. Highly recommend installing 'gawk' instead."
+    caution "Warning: Using 'awk' instead of 'gawk'. Some features may not work as expected. Highly recommend installing gnu awk (gawk) instead."
   fi
   # distro detection
   function distro() {
@@ -174,7 +174,7 @@ ixnay() {
           exit 1
         }
       }
-      /^\x20*#help / {
+      /^\x20*#help($|\x20)/ {
         sub(/^\x20+/, "", $0)
         print substr($0, 7)
         next
