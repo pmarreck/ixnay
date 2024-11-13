@@ -290,9 +290,21 @@ ixnay() {
           caution "There was an error when attempting to apply the new configuration; see traceback above."
           return $success
         fi
+      elif [ "$DISTRO" = "macos" ]; then
+        caution "This command, when run on macOS, currently only supports nix-darwin with a flakes configuration that lives in ~/.config/nix"
+        needs darwin-rebuild
+        local has_darwin_installed="$?"
+        if [ "$has_darwin_installed" = "0" ]; then
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || caution "darwin-rebuild switch --flake ~/.config/nix 2>&1 | tee \"$LOGFILE\""
+          [ -n "${DRY_RUN}" ] && return 0
+          darwin-rebuild switch --flake ~/.config/nix | tee "$LOGFILE"
+        else
+          [ "$IXNAY_MUTE_CMD_ECHO" ] || caution "nix run nix-darwin -- switch --flake ~/.config/nix 2>&1 | tee \"$LOGFILE\""
+          [ -n "${DRY_RUN}" ] && return 0
+          nix run nix-darwin -- switch --flake ~/.config/nix | tee "$LOGFILE"
+        fi
       else
         caution "This command applies an entire system configuration and thus requires NixOS. https://nixos.org/"
-        caution "(nix-darwin exists for macOS, but is not supported by ixnay yet.)"
         return 2
       fi
       ;;
