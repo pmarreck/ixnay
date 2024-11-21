@@ -262,6 +262,7 @@ ixnay() {
             mv "$LOGFILE" "$IXNAY_LOGFILEDIR/${LOGFILE_TIMESTAMP}_reify.log"
           else
             mkdir -p "$IXNAY_LOGFILEDIR"
+            touch "$LOGFILE"
           fi
         fi
         shift;
