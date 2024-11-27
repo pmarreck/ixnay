@@ -161,6 +161,7 @@ ixnay() {
   # log location
   local XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
   local IXNAY_LOGFILEDIR="${IXNAY_LOGFILEDIR:-$XDG_CACHE_HOME/ixnay}"
+  mkdir -p "$IXNAY_LOGFILEDIR"
   local LOGFILE="$IXNAY_LOGFILEDIR/last_reify.log"
   local SWITCH_OR_BOOT
   # Default to switching on next boot instead of now
