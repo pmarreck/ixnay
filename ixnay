@@ -254,7 +254,7 @@ ixnay() {
       #help -- and then displays it.
       #help -- NixOS required currently. May work with nix-darwin in the future.
       #help -- (The "here" arg is a synonym for the other "no-upgrade" options.)
-      if [ "$DISTRO" = "nixos" ]; then
+      if [ "$DISTRO" = "nixos" ] || [ "$DISTRO" = "wsl" ]; then
         # make sure we're not just doing a dry run
         if ! [ -n "${DRY_RUN}" ]; then
           # rename the last logfile to its timestamp
@@ -727,3 +727,4 @@ if [ "$me" = "ixnay" ]; then
   # shellcheck disable=SC2048,SC2086
   ixnay $*
 fi
+
