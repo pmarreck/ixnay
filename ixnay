@@ -86,6 +86,67 @@ function caution() {
   printf "%b%s%b\n" "${ANSI}${TXTYLW}" "$1" "${ANSI}${TXTRST}" >&2
 }
 
+function parse_nix_errors() {
+  local logfile="$1"
+  if [ ! -f "$logfile" ]; then
+    return 1
+  fi
+  
+  # Parse hash mismatch errors and find the main failing package
+  if grep -q "error: hash mismatch in fixed-output derivation" "$logfile"; then
+    echo "There was a hash mismatch in a derivation."
+    
+    # Find the first failing package from dependency build errors
+    local main_package
+    main_package=$(grep "error: [1-9][0-9]* dependencies of derivation" "$logfile" | head -1 | sed -E "s/.*\/nix\/store\/[a-z0-9]+-(.+)\.drv.*/\1/")
+    
+    if [ -n "$main_package" ]; then
+      echo "The error seemed to occur with package $(puts --orange $main_package)"
+    fi
+
+    echo "This usually means the source code has changed since the package definition was created. Perhaps try a different channel or commit hash?"
+    return 0
+  fi
+  
+  # Parse other common errors only if no hash mismatch
+  # Parse network/download errors
+  if grep -q "error: unable to download\|curl: \|wget: \|error.*download" "$logfile"; then
+    echo "There were network or download errors."
+    echo "Try running the command again, or check your network connection."
+    return 0
+  fi
+  
+  # Parse disk space errors
+  if grep -q "No space left on device\|error.*space" "$logfile"; then
+    echo "There were disk space issues."
+    echo "You may need to run 'ixnay clean' to free up space."
+    return 0
+  fi
+  
+  # Parse permission errors
+  if grep -q "Permission denied\|error.*permission" "$logfile"; then
+    echo "There were permission errors."
+    echo "This might require running the command with appropriate privileges."
+    return 0
+  fi
+  
+  # Parse evaluation errors (common with flakes)
+  if grep -q "error: evaluation aborted\|error.*evaluation" "$logfile"; then
+    echo "There were Nix expression evaluation errors."
+    echo "Check your configuration files for syntax errors."
+    return 0
+  fi
+  
+  # Parse general dependency build failures
+  local failed_packages
+  failed_packages=$(grep "error: [1-9][0-9]* dependencies of derivation '/nix/store/[a-z0-9]\+-.*\.drv' failed to build" "$logfile" | head -1 | sed -E "s/.*\/nix\/store\/[a-z0-9]+-([^.]+)\.drv.*/\1/")
+  
+  if [ -n "$failed_packages" ]; then
+    echo "There was a build failure with package $failed_packages"
+    return 0
+  fi
+}
+
 is_nix_multi_user_install() {
   # Check if the nix-daemon service is running (multi-user mode)
   if [ -f /etc/systemd/system/nix-daemon.service ] || [ -f /run/systemd/system/nix-daemon.service ]; then
@@ -290,6 +351,9 @@ ixnay() {
           fi
         else
           caution "There was an error when attempting to apply the new configuration; see traceback above."
+          echo
+          caution "Analyzing errors..."
+          parse_nix_errors "$LOGFILE"
           return $success
         fi
       elif [ "$DISTRO" = "macos" ]; then
