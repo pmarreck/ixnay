@@ -24,13 +24,17 @@ set -o pipefail;
 #help
 #help Usage: ixnay <command> [<args>] [<options>]
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+source "$SCRIPT_DIR/lib/add_command.sh"
+TEST_RUNNER_DEFAULT="$SCRIPT_DIR/test"
+
 # Only define support functions if they aren't already defined in my environment (or yours)
 # I use this pattern locally in all my personal functions to edit them via "edit <functionname>"
 # which drops me into the first line of the function to edit in my $EDITOR
 # Feel free to delete if this is polluting your namespace!
 if ! [[ "$(type -t edit_function)" =~ function ]]; then
   needs() {
-    [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "$BASH_SOURCE" && return
+    [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "${BASH_SOURCE[0]}" && return
     local bin="$1"
     shift
     command -v "$bin" > /dev/null 2>&1 || {
@@ -39,7 +43,7 @@ if ! [[ "$(type -t edit_function)" =~ function ]]; then
     }
   }
   contains() {
-    [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "$BASH_SOURCE" && return
+    [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "${BASH_SOURCE[0]}" && return
     local word
     for word in $1; do
       if [[ "$word" == "$2" ]]; then
@@ -49,15 +53,15 @@ if ! [[ "$(type -t edit_function)" =~ function ]]; then
     return 1
   }
   edit() {
-    [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "$BASH_SOURCE" && return
-    if contains "$(compgen -A function)" $1; then
+    [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "${BASH_SOURCE[0]}" && return
+    if contains "$(compgen -A function)" "$1"; then
       EDIT=1 $1
     else
       $EDITOR "$@"
     fi
   }
   edit_function() {
-    [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "$BASH_SOURCE" && return
+    [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "${BASH_SOURCE[0]}" && return
     needs rg "please install ripgrep!" || return 1
     local function_name
     function_name="$1"
@@ -70,8 +74,9 @@ if ! [[ "$(type -t edit_function)" =~ function ]]; then
       fi;
       return 1
     fi
-    local fl=$(rg -n -e "${function_name} *\(\) *\{" -e "function +${function_name}(?: *\(\))? *\{" "$file" | tail -n1 | cut -d: -f1)
-    $EDITOR "$file":$fl
+    local fl
+    fl=$(rg -n -e "${function_name} *\(\) *\{" -e "function +${function_name}(?: *\(\))? *\{" "$file" | tail -n1 | cut -d: -f1)
+    $EDITOR "$file":"$fl"
   }
 fi
 
@@ -83,7 +88,11 @@ function caution() {
   local TXTYLW='0;33m' # Yellow
   # local TXTGRN='0;32m' # Green
   local TXTRST='0m'    # Text Reset, disable coloring
-  printf "%b%s%b\n" "${ANSI}${TXTYLW}" "$1" "${ANSI}${TXTRST}" >&2
+  if [ -n "${IXNAY_NO_COLOR:-}" ]; then
+    printf "%s\n" "$1" >&2
+  else
+    printf "%b%s%b\n" "${ANSI}${TXTYLW}" "$1" "${ANSI}${TXTRST}" >&2
+  fi
 }
 
 function parse_nix_errors() {
@@ -94,14 +103,14 @@ function parse_nix_errors() {
   
   # Parse hash mismatch errors and find the main failing package
   if grep -q "error: hash mismatch in fixed-output derivation" "$logfile"; then
-    echo "There was a hash mismatch in a derivation."
-    
+      echo "There was a hash mismatch in a derivation."
+
     # Find the first failing package from dependency build errors
     local main_package
     main_package=$(grep "error: [1-9][0-9]* dependencies of derivation" "$logfile" | head -1 | sed -E "s/.*\/nix\/store\/[a-z0-9]+-(.+)\.drv.*/\1/")
-    
+
     if [ -n "$main_package" ]; then
-      echo "The error seemed to occur with package $(puts --orange $main_package)"
+      echo "The error seemed to occur with package $(puts --orange "$main_package")"
     fi
 
     echo "This usually means the source code has changed since the package definition was created. Perhaps try a different channel or commit hash?"
@@ -145,6 +154,25 @@ function parse_nix_errors() {
     echo "There was a build failure with package $failed_packages"
     return 0
   fi
+}
+
+run_ixnay_tests() {
+  local mode="$1"
+  shift || true
+  local runner="${IXNAY_TEST_RUNNER:-$TEST_RUNNER_DEFAULT}"
+  if [ ! -x "$runner" ]; then
+    caution "Test runner not found or not executable: $runner"
+    return 1
+  fi
+  if [ -n "${DRY_RUN:-}" ]; then
+    [ "$mode" = "muted" ] || [ -n "${IXNAY_MUTE_CMD_ECHO:-}" ] || caution "$runner $*"
+    return 0
+  fi
+  if [ "$mode" = "muted" ]; then
+    "$runner" "$@" >/dev/null 2>&1
+    return $?
+  fi
+  "$runner" "$@"
 }
 
 is_nix_multi_user_install() {
@@ -191,7 +219,7 @@ is_managed_by_determinate_nix() {
 
 ixnay() {
   # editing via "edit ixnay"
-  [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "$BASH_SOURCE" && return
+  [ -n "${EDIT}" ] && unset EDIT && edit_function "${FUNCNAME[0]}" "${BASH_SOURCE[0]}" && return
   AWK=$(command -v gawk || command -v awk)
   # if the path leads to awk instead of gawk, we warn the user
   if [ "$(basename "$AWK")" = "awk" ]; then
@@ -199,15 +227,17 @@ ixnay() {
   fi
   # distro detection
   function distro() {
+    local release_file="/etc/os-release"
     local dist_name
     if [ "$(uname)" = "Darwin" ]; then
       dist_name="macos"
     elif grep -qEi "(Microsoft|WSL)" /proc/version &> /dev/null; then
       dist_name="wsl"
     else
-      dist_name=$($AWK -F'=' '/^NAME=/{gsub(/"/, "", $2); print $2}' ${1:-/etc/os-release})
+      # shellcheck disable=SC2016
+      dist_name=$($AWK -F'=' '/^NAME=/{gsub(/"/, "", $2); print $2}' "$release_file")
       dist_name="${dist_name,,}"
-      if ! [ "$dist_name" = "nixos" ]; then
+      if [ "$dist_name" != "nixos" ]; then
         dist_name="linux"
       fi
     fi
@@ -215,8 +245,10 @@ ixnay() {
   }
   local DISTRO
   DISTRO=$(distro)
+  local IXNAY_ABOUT="IXNAY: A sane, beginner-friendly wrapper for nix-shell, nix and friends."
   # datetimestamp of a file
   function datetimestampfile() {
+    # shellcheck disable=SC2016
     stat -c '%y' "$1" | $AWK '{print $1$2}' | tr -d ':-' # | cut -d"." -f1 # to remove milliseconds
   }
   # log location
@@ -229,6 +261,7 @@ ixnay() {
   [ -n "${SWITCH_NOW}" ] && SWITCH_OR_BOOT="switch" || SWITCH_OR_BOOT="boot"
   function _ixnay_help() {
     # this is some cleverness that extracts the inline help text from all the case options
+    # shellcheck disable=SC2016
     $AWK '
       BEGIN {
         if (!("platform" in PROCINFO)) {
@@ -253,7 +286,7 @@ ixnay() {
         print ""
         print "ixnay " $0
       }
-    ' "$BASH_SOURCE"
+    ' "${BASH_SOURCE[0]}"
   }
   local NIX_COMMAND=${NIX_COMMAND:-nix}
   case $NIX_COMMAND in
@@ -267,6 +300,15 @@ ixnay() {
       ;;
   esac
   case $1 in
+    -a | --about)
+      echo "$IXNAY_ABOUT"
+      return 0
+      ;;
+    --test)
+      shift || true
+      run_ixnay_tests muted "$@"
+      return $?
+      ;;
     help | --help | -h | -?)
       #help -- The help you see here!
       _ixnay_help
@@ -280,7 +322,7 @@ ixnay() {
       [ -n "${DRY_RUN}" ] && return 0
       nix-channel --list
       ;;
-    add-channel | add) #args <channelname> <url>
+    add-channel) #args <channelname> <url>
       #help -- Adds channel <channelname> via <url>.
       #help    NOTE: Using Flakes instead of channels is advised.
       caution "NOTE: Using Flakes instead of channels is advised."
@@ -289,7 +331,7 @@ ixnay() {
       [ -n "${DRY_RUN}" ] && return 0
       nix-channel --add "$2" "$1"
       ;;
-    remove-channel | remove) #args <channelname>
+    remove-channel) #args <channelname>
       #help -- Removes channel <channelname>.
       #help    NOTE: Using Flakes instead of channels is advised.
       caution "NOTE: Using Flakes instead of channels is advised."
@@ -309,6 +351,79 @@ ixnay() {
       # shellcheck disable=SC2086
       nix-channel --update $1
       ;;
+    add) #args <user|system> <stable|unstable|master> <packagename>
+      #help -- Declaratively adds a package to the managed config block (commented with its description).
+      shift;
+      if [ $# -lt 3 ]; then
+        caution "Usage: ixnay add <user|system> <stable|unstable|master> <package>"
+        return 1
+      fi
+      local parsed
+      if ! parsed=$(IXNAY_ADD_PLATFORM="$DISTRO" ixnay_add_parse_args "$@" 2>&1); then
+        caution "$parsed"
+        return 1
+      fi
+      read -r scope branch package <<< "$parsed"
+      local target_file
+      if ! target_file=$(IXNAY_ADD_PLATFORM="$DISTRO" ixnay_add_target_file "$scope" 2>&1); then
+        caution "$target_file"
+        return 1
+      fi
+      local attr_expr="${branch}.${package}"
+      local description_cmd="nix eval --raw nixpkgs#${package}.meta.description"
+      if [ -n "$DRY_RUN" ]; then
+        [ -n "$IXNAY_MUTE_CMD_ECHO" ] || caution "$description_cmd"
+        return 0
+      fi
+      [ -n "$IXNAY_MUTE_CMD_ECHO" ] || caution "$description_cmd"
+      local description
+      if ! description=$(ixnay_add_fetch_description "$branch" "$package" 2>&1); then
+        caution "$description"
+        return 1
+      fi
+      local insert_output=""
+      if ! insert_output=$(IXNAY_ADD_PLATFORM="$DISTRO" IXNAY_ADD_USER="${IXNAY_ADD_USER:-$USER}" ixnay_add_insert_package "$target_file" "$scope" "$attr_expr" "$description" 2>&1); then
+        [ -n "$insert_output" ] && caution "$insert_output"
+        return 1
+      fi
+      if [ -n "$insert_output" ]; then
+        caution "$insert_output"
+        return 0
+      fi
+      local success_target_desc
+      if [ "$scope" = "system" ]; then
+        success_target_desc="system packages"
+      else
+        success_target_desc="${IXNAY_ADD_USER:-$USER}'s packages"
+      fi
+      echo "Added ${attr_expr} to ${success_target_desc} in ${target_file}"
+      ;;
+    remove | rm) #args <user|system> <stable|unstable|master> <packagename>
+      #help -- Removes a package that was previously added via `ixnay add`.
+      shift;
+      if [ $# -lt 3 ]; then
+        caution "Usage: ixnay remove <user|system> <stable|unstable|master> <package>"
+        return 1
+      fi
+      local rm_parsed
+      if ! rm_parsed=$(IXNAY_ADD_PLATFORM="$DISTRO" ixnay_add_parse_args "$@" 2>&1); then
+        caution "$rm_parsed"
+        return 1
+      fi
+      read -r rm_scope rm_branch rm_package <<< "$rm_parsed"
+      local rm_target
+      if ! rm_target=$(IXNAY_ADD_PLATFORM="$DISTRO" ixnay_add_target_file "$rm_scope" 2>&1); then
+        caution "$rm_target"
+        return 1
+      fi
+      local rm_attr="${rm_branch}.${rm_package}"
+      if [ -n "$DRY_RUN" ]; then
+        return 0
+      fi
+      if ! IXNAY_ADD_PLATFORM="$DISTRO" IXNAY_ADD_USER="${IXNAY_ADD_USER:-$USER}" ixnay_add_remove_package "$rm_target" "$rm_scope" "$rm_attr"; then
+        return 1
+      fi
+      ;;
     reify | realize | apply | rebuild) #args [no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here]
       #help -- Reads the config files, sets up the new config, switches to the new config, optionally doesn't update from the Internet.
       #help -- Also logs its output to IXNAY_LOGFILEDIR (defaults to $XDG_CACHE_HOME/ixnay), rotating it with a datetimestamp,
@@ -317,10 +432,11 @@ ixnay() {
       #help -- (The "here" arg is a synonym for the other "no-upgrade" options.)
       if [ "$DISTRO" = "nixos" ] || [ "$DISTRO" = "wsl" ]; then
         # make sure we're not just doing a dry run
-        if ! [ -n "${DRY_RUN}" ]; then
+        if [ -z "${DRY_RUN:-}" ]; then
           # rename the last logfile to its timestamp
           if [ -f "$LOGFILE" ]; then
-            local LOGFILE_TIMESTAMP=$(datetimestampfile "$LOGFILE")
+            local LOGFILE_TIMESTAMP
+            LOGFILE_TIMESTAMP=$(datetimestampfile "$LOGFILE")
             mv "$LOGFILE" "$IXNAY_LOGFILEDIR/${LOGFILE_TIMESTAMP}_reify.log"
           else
             mkdir -p "$IXNAY_LOGFILEDIR"
@@ -489,7 +605,7 @@ ixnay() {
       #help    Asks you whether you wanted to "up"/"upgrade" or "un"/"uninstall" a package, and then does it.
       echo "Did you mean to 'up'/'upgrade' or 'un'/'uninstall' a package?"
       local user_choice
-      read -p "Enter 'un', 'uninstall'; or 'up', 'upgrade': [up] " user_choice
+      read -r -p "Enter 'un', 'uninstall'; or 'up', 'upgrade': [up] " user_choice
       # if the user_choice is empty, set it to "up"
       [ -z "$user_choice" ] && user_choice="up"
       case "${user_choice,,}" in
@@ -509,7 +625,7 @@ ixnay() {
           ;;
       esac
       ;;
-    uninstall | un | remove | rm) #args <packagename>
+    uninstall | un) #args <packagename>
       #help -- Imperatively uninstalls/removes a package from your profile.
       #help    See the caveats/suggestions for "ixnay install".
       if [ -n "${NIXOS}" ]; then
@@ -524,7 +640,7 @@ ixnay() {
         package=$(echo "$package" | sed 's/^\///; s/\/$//')
         [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || caution "nix profile remove --regex '$package'"
         [ -n "${DRY_RUN}" ] && return 0
-        nix profile remove --regex $package
+        nix profile remove --regex "$package"
       else
         [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || caution "nix profile remove $package"
         [ -n "${DRY_RUN}" ] && return 0
@@ -573,7 +689,7 @@ ixnay() {
             ixnay list
             echo
             caution "The command to reinstall all of the profile packages at once, if you end up needing to, would be:"
-            echo ixnay install $(ixnay list --only-profile)
+            echo "ixnay install $(ixnay list --only-profile)"
           else
             caution "Due to the risk of breaking your Nix installation, you must upgrade Nix manually."
             caution "Please follow the instructions at https://nixos.org/manual/nix/stable/installation/upgrading.html"
@@ -590,7 +706,7 @@ ixnay() {
             caution "Your Nix install type seems to be: $(nit)."
             [ -n "$unknown_diagnosis" ] && caution "$unknown_diagnosis"
             if [ $nit = "multi-user" ]; then
-              if [ $DISTRO = "macos" ]; then
+              if [ "$DISTRO" = "macos" ]; then
                 caution "The correct command to upgrade multi-user Nix on macOS MAY be (warning: hairy!):"
                 echo "sudo -i sh -c 'nix-channel --update && nix-env --install --attr nixpkgs.nix && launchctl remove org.nixos.nix-daemon && launchctl load /Library/LaunchDaemons/org.nixos.nix-daemon.plist'"
               else
@@ -612,7 +728,7 @@ ixnay() {
             caution "Here's your list of installed packages in the event you screw up Nix here and need to reinstall them:"
             ixnay list
             caution "The command to reinstall all of the profile packages at once, if you end up needing to, would be:"
-            echo ixnay install $(ixnay list --only-profile)
+            echo "ixnay install $(ixnay list --only-profile)"
           fi
           ;;
         *) #nodoc
@@ -652,7 +768,7 @@ ixnay() {
     list | l)
       #help -- List local explicitly-installed packages (as well as global packages if on NixOS)
       # Use awk to find all packages from the profile list
-      # shellcheck disable=SC2155
+      # shellcheck disable=SC2155,SC2016
       local packages=$($NIX_COMMAND profile list | $AWK -F. '
         /Flake attribute:/{ print $NF }
       ')
@@ -680,6 +796,7 @@ ixnay() {
       # this is a bit of a wonky way to get at this data, but it seems to work at least
       # check for running on nixos; otherwise there are no system packages and we error
       if [ "$DISTRO" = "nixos" ]; then
+        # shellcheck disable=SC2016
         nix-store -q --tree /run/current-system | rg '^│   [├└]───' | $AWK -F/ '{ print $4 }' | $AWK -F' ' '{ print $1 }' | cut -c34- | sort -u
       else
         if [ "$DISTRO" = "macos" ]; then
@@ -699,8 +816,7 @@ ixnay() {
       [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || caution "nix-env -qaP $*"
       [ -n "${DRY_RUN}" ] && return 0
       # shellcheck disable=SC2048,SC2086
-      nix-env -qaP $*
-      if [ $? -ne 0 ]; then
+      if ! nix-env -qaP $*; then
         caution "I see it errored. Locate/find not really recommended anymore. Try \`ixnay search\` instead."
       fi
       ;;
@@ -714,6 +830,33 @@ ixnay() {
       # filter out anything that says "evaluation warning"
       # shellcheck disable=SC2048,SC2086
       nix search nixpkgs $* 2>&1 | awk '!/evaluation warning|^evaluating/'
+      ;;
+    describe | desc) #args <package>
+      #help -- Prints the nixpkgs description for a package via `nix eval --raw`.
+      shift;
+      if [ $# -lt 1 ]; then
+        caution "Usage: ixnay describe <package>"
+        return 1
+      fi
+      local describe_target="$1"
+      local describe_expr="nixpkgs#${describe_target}.meta.description"
+      local describe_cmd="nix eval --raw ${describe_expr}"
+      [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || caution "$describe_cmd"
+      if [ -n "${DRY_RUN}" ]; then
+        return 0
+      fi
+      local describe_output
+      if ! describe_output=$(nix eval --raw "${describe_expr}" 2>&1); then
+        caution "$describe_output"
+        return 1
+      fi
+      printf '%s\n' "$describe_output"
+      ;;
+    test) #args [<test_runner_args>]
+      #help -- Runs the ixnay test suite with full output (uses ./test or IXNAY_TEST_RUNNER).
+      shift;
+      run_ixnay_tests loud "$@"
+      return $?
       ;;
     optimize | optimise)
       #help -- Replaces any duplicate files in the Nix store with hardlinks, saving space.
@@ -743,7 +886,7 @@ ixnay() {
       # nix-instantiate --eval --expr 'builtins.toJSON (import <nixos/nixos> {}).options.environment.systemPackages.definitionsWithLocations' --json | jq 'fromjson' -C
       [ -n "${DRY_RUN}" ] && return 0
       # shellcheck disable=SC2048,SC2086
-      nix-store -q --references `which $1`
+      nix-store -q --references "$(command -v "$1")"
       ;;
     depends-on) #args <packagename>
       #help -- Lists all the packages/derivations that depend on a package.
@@ -751,7 +894,7 @@ ixnay() {
       [ -n "${IXNAY_MUTE_CMD_ECHO}" ] || caution "nix-store -q --referrers \`which $1\`"
       [ -n "${DRY_RUN}" ] && return 0
       # shellcheck disable=SC2048,SC2086
-      nix-store -q --referrers `which $1`
+      nix-store -q --referrers "$(command -v "$1")"
       ;;
     repair | doc | doctor)
       #help -- Validates AND repairs the current contents of the Nix store.
@@ -784,7 +927,7 @@ ixnay() {
       [ -n "${DRY_RUN}" ] && return 0
       sudo -H nix-store --verify --check-contents --repair
       ;;
-    "") #args [<nothing, or anything not understood>]
+    "" | *) #args [<nothing, or anything not understood>]
       #help -- Prints this help message but returns 2 for bad usage
       _ixnay_help
       return 2
@@ -800,4 +943,3 @@ if [ "$me" = "ixnay" ]; then
   # shellcheck disable=SC2048,SC2086
   ixnay $*
 fi
-

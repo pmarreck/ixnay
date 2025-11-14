@@ -1,11 +1,52 @@
-# ixnay
+# IXNAY
 
-Ixnay is a Nix shell wrapper that I'm writing as I learn about Nix and how to do various operations.
+IXNAY is a pragmatic TUI-style wrapper around the Nix toolchain. It focuses on the day-to-day workflows that are still awkward while Nix transitions between the legacy `nix-*` utilities and the newer `nix` CLI. IXNAY standardises the commands you run, keeps declarative package blocks in sync, and explains exactly what it is doing so you always know the underlying Nix invocation.
 
-I did this because Nix (as of 6/2022) still seems to be in a contentious transition/rewrite period where sometimes the acceptable way to do something is via a `nix-*` command and sometimes it is a `nix <whatever>` command. And the docs out there often differ on this too. I also keep hearing rumors about the nix command not being fully stable yet and that people still use the old commands for things, and that there's some kind of tension between the "old devs" and the "new devs". So since both are currently supported (I think?), I'm skirting around all this nonsense by writing a unified TUI that will allow me to change the underlying implementation when the time is right for some given operation, without messing up my muscle memory, and hopefully adding some ease-of-use.
+## Highlights
 
-It's a WIP and will probably change a lot so I don't recommend it yet. The goal is to not have to use this anymore and just rely on the `nix` command at some point in the future, once that is broadly regarded as stable and complete (and assuming it has a nice TUI, for my personal definition of "nice").
+- **Consistent UX** – single entry point for both legacy and modern Nix subcommands, with the executed command echoed in yellow unless muted.
+- **Declarative package management** – `ixnay add/remove` keep per-system or per-user marker blocks alphabetised, channel-aware, and annotated with upstream descriptions.
+- **Safe automation** – duplicate adds are idempotent, channel changes require explicit removal, and marker insertion tolerates both `environment.systemPackages = [ … ]` and nested `environment = { systemPackages = …; };` layouts.
+- **Test-friendly** – `ixnay test` runs the full shell-based suite, while `ixnay --test` runs it silently. `IXNAY_TEST_RUNNER` can point at any compatible runner binary.
+- **Quick metadata** – `ixnay describe <pkg>` fetches the `nixpkgs` description without digging through search results.
+- **Transparent diagnostics** – helper routines parse common `nix` evaluation/build failures and print actionable hints.
 
-I based it off `pac`, my `pacman` wrapper. Things both do that I think are nice: It outputs the actual underlying command it is running, in yellow, to STDERR. It outputs help if you pass no (or a non-understood) argument.
+## Requirements
 
-Also, related, I think `Guix` is a much better-designed project from the ground up, and I like that it uses Guile/Scheme/Lisp for its config language for everything from the bootloader point onward instead of this very niche language that Nix uses, but Nix is currently much better supported and has a far greater library of stuff, and I don't have as much time to tinker as I would prefer currently, so Nix it is. Also, the emphasis on free software in Guix is admirable, but often an obstacle, and I don't like obstacles. I wish a Nix-like OS existed that just used, like, an enforced subset of Bash to work (similar to what Docker does), perhaps coupled with a Bash function library; it would be significantly more accessible IMHO since Bash is just ubiquitous. (Bash also lamely uses linked lists for arrays and dicts, but I digress. "There are no solutions, only compromises." Whether you agree or not, nix-lang is in the way of Nix adoption, IMHO.)
+- A POSIX shell environment with Bash 5+
+- GNU coreutils, `gawk`, `rg`, and Nix installed with flakes enabled
+- `luajit` (preferred) or `lua` available for marker management scripts
+
+## Common Commands
+
+| Command | Purpose |
+| --- | --- |
+| `ixnay add <user|system> <stable|unstable|master> <pkg>` | Inserts an ixnay-managed package entry with description into the appropriate config file. |
+| `ixnay remove <user|system> <stable|unstable|master> <pkg>` | Removes the exact entry previously created by `add`. |
+| `ixnay describe <pkg>` | Prints the nixpkgs description via `nix eval --raw`. |
+| `ixnay test [args…]` | Runs the full test suite (default `./test`) with live output. |
+| `ixnay --test [args…]` | Runs the same suite quietly and exits with the failure count. |
+| `ixnay -a` / `ixnay --about` | Prints the one-line project description. |
+
+All commands honour `IXNAY_MUTE_CMD_ECHO` (suppress underlying command output) and `DRY_RUN` (show what would happen without executing it). Declarative operations additionally use `IXNAY_ADD_PLATFORM`, `IXNAY_DARWIN_FLAKE`, and `IXNAY_NIXOS_CONFIG` to override target files during testing.
+
+## Testing
+
+```bash
+# Verbose run
+./test
+
+# Silence output but preserve exit status (e.g. for CI)
+IXNAY_TEST_RUNNER=./test ixnay --test
+```
+
+Each individual suite exits with the number of failed assertions, so the aggregated runner returns the total failure count.
+
+## Contributing
+
+1. Enable flakes and ensure `luajit`, `gawk`, `rg`, and `shellcheck` are available.
+2. Make changes and add focused regression tests under `tests/`.
+3. Run `./test` (or `ixnay test`) and confirm a zero exit code.
+4. Mention any new files in `FILES.md` to keep the tracking table current.
+
+Issues and PRs that simplify UX, improve diagnostics, or broaden platform coverage are welcome.

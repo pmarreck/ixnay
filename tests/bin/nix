@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+if [ -n "$IXNAY_EXPECT_NIX_ARGS" ] && [ "$IXNAY_EXPECT_NIX_ARGS" != "$*" ]; then
+	echo "unexpected nix args: $*" >&2
+	exit 99
+fi
+if [ -n "$IXNAY_TEST_NIX_OUTPUT" ]; then
+	printf '%s\n' "$IXNAY_TEST_NIX_OUTPUT"
+fi
