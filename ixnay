@@ -358,18 +358,26 @@ ixnay() {
 				caution "Usage: ixnay add <user|system> <stable|unstable|master> <package>"
 				return 1
 			fi
+			local add_platform="${IXNAY_ADD_PLATFORM:-$DISTRO}"
 			local parsed
-			if ! parsed=$(IXNAY_ADD_PLATFORM="$DISTRO" ixnay_add_parse_args "$@" 2>&1); then
+			if ! parsed=$(IXNAY_ADD_PLATFORM="$add_platform" ixnay_add_parse_args "$@" 2>&1); then
 				caution "$parsed"
 				return 1
 			fi
 			read -r scope branch package <<< "$parsed"
 			local target_file
-			if ! target_file=$(IXNAY_ADD_PLATFORM="$DISTRO" ixnay_add_target_file "$scope" 2>&1); then
+			if ! target_file=$(IXNAY_ADD_PLATFORM="$add_platform" ixnay_add_target_file "$scope" 2>&1); then
 				caution "$target_file"
 				return 1
 			fi
 			local attr_expr="${branch}.${package}"
+			if [ "$add_platform" = "macos" ]; then
+				case "$branch" in
+					unstable) attr_expr="pkgs.${package}" ;;
+					stable) attr_expr="stable-pkgs.${package}" ;;
+					master) attr_expr="master-pkgs.${package}" ;;
+				esac
+			fi
 			local description_cmd="nix eval --raw nixpkgs#${package}.meta.description"
 			if [ -n "$DRY_RUN" ]; then
 				[ -n "$IXNAY_MUTE_CMD_ECHO" ] || caution "$description_cmd"
@@ -382,7 +390,7 @@ ixnay() {
 				return 1
 			fi
 			local insert_output=""
-			if ! insert_output=$(IXNAY_ADD_PLATFORM="$DISTRO" IXNAY_ADD_USER="${IXNAY_ADD_USER:-$USER}" ixnay_add_insert_package "$target_file" "$scope" "$attr_expr" "$description" 2>&1); then
+			if ! insert_output=$(IXNAY_ADD_PLATFORM="$add_platform" IXNAY_ADD_USER="${IXNAY_ADD_USER:-$USER}" ixnay_add_insert_package "$target_file" "$scope" "$attr_expr" "$description" 2>&1); then
 				[ -n "$insert_output" ] && caution "$insert_output"
 				return 1
 			fi
@@ -405,22 +413,30 @@ ixnay() {
 				caution "Usage: ixnay remove <user|system> <stable|unstable|master> <package>"
 				return 1
 			fi
+			local rm_platform="${IXNAY_ADD_PLATFORM:-$DISTRO}"
 			local rm_parsed
-			if ! rm_parsed=$(IXNAY_ADD_PLATFORM="$DISTRO" ixnay_add_parse_args "$@" 2>&1); then
+			if ! rm_parsed=$(IXNAY_ADD_PLATFORM="$rm_platform" ixnay_add_parse_args "$@" 2>&1); then
 				caution "$rm_parsed"
 				return 1
 			fi
 			read -r rm_scope rm_branch rm_package <<< "$rm_parsed"
 			local rm_target
-			if ! rm_target=$(IXNAY_ADD_PLATFORM="$DISTRO" ixnay_add_target_file "$rm_scope" 2>&1); then
+			if ! rm_target=$(IXNAY_ADD_PLATFORM="$rm_platform" ixnay_add_target_file "$rm_scope" 2>&1); then
 				caution "$rm_target"
 				return 1
 			fi
 			local rm_attr="${rm_branch}.${rm_package}"
+			if [ "$rm_platform" = "macos" ]; then
+				case "$rm_branch" in
+					unstable) rm_attr="pkgs.${rm_package}" ;;
+					stable) rm_attr="stable-pkgs.${rm_package}" ;;
+					master) rm_attr="master-pkgs.${rm_package}" ;;
+				esac
+			fi
 			if [ -n "$DRY_RUN" ]; then
 				return 0
 			fi
-			if ! IXNAY_ADD_PLATFORM="$DISTRO" IXNAY_ADD_USER="${IXNAY_ADD_USER:-$USER}" ixnay_add_remove_package "$rm_target" "$rm_scope" "$rm_attr"; then
+			if ! IXNAY_ADD_PLATFORM="$rm_platform" IXNAY_ADD_USER="${IXNAY_ADD_USER:-$USER}" ixnay_add_remove_package "$rm_target" "$rm_scope" "$rm_attr"; then
 				return 1
 			fi
 			;;

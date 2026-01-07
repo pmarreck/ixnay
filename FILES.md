@@ -25,3 +25,6 @@
 | `tests/meta_commands_test.sh` | Tests for `ixnay test`, `ixnay --test`, and about flag behavior. |
 | `lib/add_command.sh` | Implementation module for `ixnay add` logic. |
 | `tests/fixtures/nixos_user_broken_end.nix` | Fixture representing marker end sharing a line with closing bracket. |
+| `tests/fixtures/darwin_home_manager_user.nix` | Fixture snippet for nix-darwin home-manager user packages list. |
+| `tests/fixtures/darwin_system_packages.nix` | Fixture snippet for nix-darwin system packages list without per-user packages. |
+| `tests/fixtures/darwin_system_base_list.nix` | Fixture snippet for nix-darwin system packages sourced from a base list binding. |

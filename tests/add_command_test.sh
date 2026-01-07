@@ -29,7 +29,7 @@ mac_output="$(IXNAY_ADD_PLATFORM=macos ixnay_add_parse_args system stable ripgre
 mac_status=$?
 set -e
 
-assert_eq 1 "$mac_status" "parse args rejects system scope on macos"
-assert_eq "system scope unsupported on macos" "$mac_output" "parse args explains macos scope restriction"
+assert_eq 0 "$mac_status" "parse args accepts system scope on macos"
+assert_eq "system stable ripgrep" "$mac_output" "parse args returns tokens for macos system scope"
 
 exit "$_ixnay_test_failures"

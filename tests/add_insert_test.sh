@@ -14,6 +14,9 @@ tmp_user=""
 tmp_sort=""
 tmp_comment=""
 tmp_conflict=""
+tmp_darwin=""
+tmp_darwin_system=""
+tmp_darwin_base=""
 cleanup() {
 	rm -f "$tmp_file"
 	if [ -n "$tmp_nomarker" ]; then
@@ -33,6 +36,15 @@ cleanup() {
 	fi
 	if [ -n "$tmp_conflict" ]; then
 		rm -f "$tmp_conflict"
+	fi
+	if [ -n "$tmp_darwin" ]; then
+		rm -f "$tmp_darwin"
+	fi
+	if [ -n "$tmp_darwin_system" ]; then
+		rm -f "$tmp_darwin_system"
+	fi
+	if [ -n "$tmp_darwin_base" ]; then
+		rm -f "$tmp_darwin_base"
 	fi
 }
 trap cleanup EXIT
@@ -102,6 +114,51 @@ assert_eq "unstable.direnv # Direnv hooks" "$trimmed_user_block" "user block con
 
 alpha_block=$(awk '/# IXNAY USER PACKAGES \(alpha\) START/{flag=1;next}/# IXNAY USER PACKAGES \(alpha\) END/{if(flag){flag=0; exit}}flag{print}' "$tmp_user" | tr -d '\n')
 assert_eq "" "$alpha_block" "other user block untouched"
+
+darwin_fixture="$ROOT_DIR/tests/fixtures/darwin_home_manager_user.nix"
+tmp_darwin="$(mktemp /tmp/ixnay-darwin-user.XXXXXX)"
+cp "$darwin_fixture" "$tmp_darwin"
+
+set +e
+IXNAY_ADD_PLATFORM=macos IXNAY_ADD_USER=sample ixnay_add_insert_package "$tmp_darwin" user "unstable.fzf" "Fuzzy finder" 2>&1
+darwin_status=$?
+set -e
+
+assert_eq 0 "$darwin_status" "insert package handles nix-darwin home-manager user packages"
+
+darwin_block=$(awk '/# IXNAY USER PACKAGES \(sample\) START/{flag=1;next}/# IXNAY USER PACKAGES \(sample\) END/{if(flag){flag=0; exit}}flag{print}' "$tmp_darwin" | tr -d '\n')
+trimmed_darwin_block="$(echo "$darwin_block" | sed 's/^[[:space:]]*//')"
+assert_eq "unstable.fzf # Fuzzy finder" "$trimmed_darwin_block" "darwin home-manager block contains package"
+
+darwin_system_fixture="$ROOT_DIR/tests/fixtures/darwin_system_packages.nix"
+tmp_darwin_system="$(mktemp /tmp/ixnay-darwin-system.XXXXXX)"
+cp "$darwin_system_fixture" "$tmp_darwin_system"
+
+set +e
+IXNAY_ADD_PLATFORM=macos IXNAY_ADD_USER=sample ixnay_add_insert_package "$tmp_darwin_system" user "unstable.fzf" "Fuzzy finder" 2>&1
+darwin_system_status=$?
+set -e
+
+assert_eq 0 "$darwin_system_status" "darwin user scope falls back to system packages list"
+
+darwin_system_block=$(awk '/# IXNAY USER PACKAGES \(sample\) START/{flag=1;next}/# IXNAY USER PACKAGES \(sample\) END/{if(flag){flag=0; exit}}flag{print}' "$tmp_darwin_system" | tr -d '\n')
+trimmed_darwin_system_block="$(echo "$darwin_system_block" | sed 's/^[[:space:]]*//')"
+assert_eq "unstable.fzf # Fuzzy finder" "$trimmed_darwin_system_block" "darwin system list contains user marker block entry"
+
+darwin_base_fixture="$ROOT_DIR/tests/fixtures/darwin_system_base_list.nix"
+tmp_darwin_base="$(mktemp /tmp/ixnay-darwin-base.XXXXXX)"
+cp "$darwin_base_fixture" "$tmp_darwin_base"
+
+set +e
+IXNAY_ADD_PLATFORM=macos ixnay_add_insert_package "$tmp_darwin_base" system "pkgs.fzf" "Fuzzy finder" 2>&1
+darwin_base_status=$?
+set -e
+
+assert_eq 0 "$darwin_base_status" "darwin system list resolves through base list binding"
+
+darwin_base_block=$(awk '/# IXNAY SYSTEM PACKAGES START/{flag=1;next}/# IXNAY SYSTEM PACKAGES END/{if(flag){flag=0; exit}}flag{print}' "$tmp_darwin_base" | tr -d '\n')
+trimmed_darwin_base_block="$(echo "$darwin_base_block" | sed 's/^[[:space:]]*//')"
+assert_eq "pkgs.fzf # Fuzzy finder" "$trimmed_darwin_base_block" "darwin base list contains package"
 
 tmp_sort="$(mktemp /tmp/ixnay-system-sort.XXXXXX)"
 cp "$fixture" "$tmp_sort"

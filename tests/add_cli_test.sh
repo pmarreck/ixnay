@@ -12,8 +12,12 @@ test_description "ixnay add CLI integration"
 
 config_fixture="$ROOT_DIR/tests/fixtures/nixos_two_users_example.nix"
 tmp_cli="$(mktemp /tmp/ixnay-cli.XXXXXX)"
+tmp_darwin_cli=""
 cleanup() {
 	rm -f "$tmp_cli"
+	if [ -n "$tmp_darwin_cli" ]; then
+		rm -f "$tmp_darwin_cli"
+	fi
 }
 trap cleanup EXIT
 cp "$config_fixture" "$tmp_cli"
@@ -47,5 +51,23 @@ assert_eq "ripgrep already present via stable.ripgrep; run 'ixnay remove' first 
 
 user_block=$(awk '/# IXNAY USER PACKAGES \(sample\) START/{flag=1;next}/# IXNAY USER PACKAGES \(sample\) END/{if(flag){flag=0; exit}}flag{print}' "$tmp_cli" | sed 's/^[[:space:]]*//')
 assert_eq "stable.ripgrep # Fast search tool" "$user_block" "cli add inserts package in user block"
+
+darwin_fixture="$ROOT_DIR/tests/fixtures/darwin_system_packages.nix"
+tmp_darwin_cli="$(mktemp /tmp/ixnay-cli-darwin.XXXXXX)"
+cp "$darwin_fixture" "$tmp_darwin_cli"
+
+export IXNAY_EXPECT_NIX_ARGS="eval --raw nixpkgs#fzf.meta.description"
+export IXNAY_TEST_NIX_OUTPUT="Command-line fuzzy finder"
+
+set +e
+darwin_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=macos IXNAY_DARWIN_FLAKE="$tmp_darwin_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/ixnay" add system unstable fzf 2>&1)"
+darwin_status=$?
+set -e
+
+assert_eq 0 "$darwin_status" "darwin cli add exits successfully"
+assert_eq "Added pkgs.fzf to system packages in $tmp_darwin_cli" "$darwin_output" "darwin cli add prints mapped prefix"
+
+darwin_block=$(awk '/# IXNAY SYSTEM PACKAGES START/{flag=1;next}/# IXNAY SYSTEM PACKAGES END/{if(flag){flag=0; exit}}flag{print}' "$tmp_darwin_cli" | sed 's/^[[:space:]]*//')
+assert_eq "pkgs.fzf # Command-line fuzzy finder" "$darwin_block" "darwin cli add inserts mapped package"
 
 exit "$_ixnay_test_failures"

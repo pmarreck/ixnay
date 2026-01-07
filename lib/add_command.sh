@@ -37,12 +37,6 @@ ixnay_add_parse_args() {
 		return 1
 	fi
 
-	local platform="${IXNAY_ADD_PLATFORM:-}"
-	if [ "$platform" = "macos" ] && [ "$scope" = "system" ]; then
-		echo "system scope unsupported on macos" >&2
-		return 1
-	fi
-
 	echo "$scope $branch $package"
 }
 
@@ -55,10 +49,6 @@ ixnay_add_target_file() {
 			echo "${IXNAY_NIXOS_CONFIG:-/etc/nixos/configuration.nix}"
 			;;
 		macos)
-			if [ "$scope" = "system" ]; then
-				echo "system scope unsupported on macos" >&2
-				return 1
-			fi
 			local default_path="$HOME/.config/nix/flake.nix"
 			echo "${IXNAY_DARWIN_FLAKE:-$default_path}"
 			;;
@@ -100,6 +90,7 @@ ixnay_add_insert_package() {
 	local attr_expr="$3"
 	local description="$4"
 	local target_user="${IXNAY_ADD_USER:-$USER}"
+	local platform="${IXNAY_ADD_PLATFORM:-}"
 
 	if [ ! -f "$file_path" ]; then
 		echo "target file '$file_path' not found" >&2
@@ -132,7 +123,7 @@ ixnay_add_insert_package() {
 			;;
 	esac
 
-	ixnay_add_ensure_markers "$file_path" "$scope" "$start_marker" "$end_marker" "$target_user" || return 1
+	ixnay_add_ensure_markers "$file_path" "$scope" "$start_marker" "$end_marker" "$target_user" "$platform" || return 1
 
 	"$LUA_BIN" - "$file_path" "$attr_expr" "$description" "$start_marker" "$end_marker" "$target_user" <<'LUA'
 local path = arg[1]
@@ -317,18 +308,20 @@ ixnay_add_ensure_markers() {
 	local start_marker="$3"
 	local end_marker="$4"
 	local target_user="$5"
+	local platform="$6"
 
 	local LUA_BIN
 	if ! LUA_BIN=$(ixnay_add_lua_bin); then
 		return 1
 	fi
 
-	"$LUA_BIN" - "$file_path" "$scope" "$start_marker" "$end_marker" "$target_user" <<'LUA'
+	"$LUA_BIN" - "$file_path" "$scope" "$start_marker" "$end_marker" "$target_user" "$platform" <<'LUA'
 local path = arg[1]
 local scope = arg[2]
 local start_marker = arg[3]
 local end_marker = arg[4]
 local target_user = arg[5]
+local platform = arg[6] or ""
 
 local function read_file(file_path)
 	local fh, err = io.open(file_path, "r")
@@ -376,6 +369,130 @@ local function find_matching_brace(text, brace_open)
 	return nil
 end
 
+local function skip_ws_and_comments(text, pos)
+	while pos <= #text do
+		local char = text:sub(pos, pos)
+		if char:match("%s") then
+			pos = pos + 1
+		elseif char == '#' then
+			local newline = text:find("\n", pos, true)
+			if not newline then
+				return #text + 1
+			end
+			pos = newline + 1
+		else
+			break
+		end
+	end
+	return pos
+end
+
+local function is_ident_char(char)
+	return char:match("[%w_%-]") ~= nil
+end
+
+local function read_identifier(text, pos)
+	local start = pos
+	while pos <= #text do
+		local char = text:sub(pos, pos)
+		if is_ident_char(char) then
+			pos = pos + 1
+		else
+			break
+		end
+	end
+	if pos > start then
+		return text:sub(start, pos - 1)
+	end
+	return nil
+end
+
+local function skip_with_clause(text, pos)
+	if text:sub(pos, pos + 3) ~= "with" then
+		return pos
+	end
+	local after = text:sub(pos + 4, pos + 4)
+	if after ~= "" and not after:match("%s") then
+		return pos
+	end
+	local semi = text:find(";", pos + 4, true)
+	if not semi then
+		return pos
+	end
+	return skip_ws_and_comments(text, semi + 1)
+end
+
+local function find_named_list_definition(text, name)
+	local search_from = 1
+	while search_from <= #text do
+		local idx = text:find(name, search_from, true)
+		if not idx then
+			return nil
+		end
+		local before = idx > 1 and text:sub(idx - 1, idx - 1) or ""
+		local after = text:sub(idx + #name, idx + #name)
+		if (idx == 1 or not is_ident_char(before)) and (after == "" or not is_ident_char(after)) then
+			local eq = text:find("=", idx + #name, true)
+			if eq then
+				local pos = skip_ws_and_comments(text, eq + 1)
+				pos = skip_with_clause(text, pos)
+				if text:sub(pos, pos) == "[" then
+					return pos
+				end
+			end
+		end
+		search_from = idx + #name
+	end
+	return nil
+end
+
+local function find_anchor_block(text, anchor)
+	local idx = text:find(anchor, 1, true)
+	if not idx then
+		return nil
+	end
+	local brace_open = text:find("{", idx, true)
+	if not brace_open then
+		return nil
+	end
+	local brace_close = find_matching_brace(text, brace_open)
+	if not brace_close then
+		return nil
+	end
+	local pos = skip_ws_and_comments(text, brace_close + 1)
+	if text:sub(pos, pos) == ":" then
+		pos = skip_ws_and_comments(text, pos + 1)
+		if text:sub(pos, pos) == "{" then
+			local brace2 = pos
+			local close2 = find_matching_brace(text, brace2)
+			if close2 then
+				return brace2, close2
+			end
+		end
+	end
+	return brace_open, brace_close
+end
+
+local function find_list_after_assignment(text, assign_idx, limit)
+	local eq = text:find("=", assign_idx, true)
+	if not eq or (limit and eq > limit) then
+		return nil
+	end
+	local pos = skip_ws_and_comments(text, eq + 1)
+	pos = skip_with_clause(text, pos)
+	if text:sub(pos, pos) == "[" then
+		return pos
+	end
+	local name = read_identifier(text, pos)
+	if name then
+		local list_idx = find_named_list_definition(text, name)
+		if list_idx and (not limit or list_idx < limit) then
+			return list_idx
+		end
+	end
+	return nil
+end
+
 local function find_list_end(text, open_idx)
 	local depth = 0
 	local pos = open_idx
@@ -402,6 +519,22 @@ local function find_list_end(text, open_idx)
 		::continue::
 	end
 	return closing_idx
+end
+
+local function find_open_bracket_after(text, pattern, from_idx, limit)
+	local search_from = from_idx or 1
+	while true do
+		local idx = text:find(pattern, search_from, true)
+		if not idx then
+			break
+		end
+		local open_bracket = text:find("[", idx, true)
+		if open_bracket and (not limit or open_bracket < limit) then
+			return open_bracket
+		end
+		search_from = idx + #pattern
+	end
+	return nil
 end
 
 local function detect_entry_indent(text, open_idx)
@@ -435,7 +568,10 @@ end
 local function find_system_packages_list(text)
 	local idx = text:find("environment.systemPackages", 1, true)
 	if idx then
-		return text:find("[", idx, true)
+		local direct = find_list_after_assignment(text, idx, nil)
+		if direct then
+			return direct
+		end
 	end
 
 	local pattern = "environment%s*=%s*%{"
@@ -454,8 +590,8 @@ local function find_system_packages_list(text)
 		local rel = block:find("systemPackages", 1, true)
 		if rel then
 			local global_idx = brace_open + rel - 1
-			local open_bracket = text:find("[", global_idx, true)
-			if open_bracket and open_bracket < brace_close then
+			local open_bracket = find_list_after_assignment(text, global_idx, brace_close)
+			if open_bracket then
 				return open_bracket
 			end
 		end
@@ -465,35 +601,43 @@ local function find_system_packages_list(text)
 end
 
 local function find_user_packages_list(text, user)
-	local anchor = "users.users." .. user
-	local idx = text:find(anchor, 1, true)
-	if not idx then
-		io.stderr:write("could not find ", anchor, " in ", path, "\n")
-		os.exit(1)
+	local direct_patterns = {
+		"users.users." .. user .. ".packages",
+		"home-manager.users." .. user .. ".home.packages",
+		"home-manager.users." .. user .. ".packages",
+	}
+	for _, pattern in ipairs(direct_patterns) do
+		local open_bracket = find_open_bracket_after(text, pattern, 1, nil)
+		if open_bracket then
+			return open_bracket
+		end
 	end
-	local brace_open = text:find("{", idx, true)
-	if not brace_open then
-		io.stderr:write("could not find user block for ", anchor, "\n")
-		os.exit(1)
+
+	local function find_in_block(anchor, keys)
+		local brace_open, brace_close = find_anchor_block(text, anchor)
+		if not brace_open or not brace_close then
+			return nil
+		end
+		for _, key in ipairs(keys) do
+			local open_bracket = find_open_bracket_after(text, key, brace_open, brace_close)
+			if open_bracket then
+				return open_bracket
+			end
+		end
+		return nil
 	end
-	local brace_close = find_matching_brace(text, brace_open)
-	if not brace_close then
-		io.stderr:write("could not find end of user block for ", anchor, "\n")
-		os.exit(1)
+
+	local open_bracket = find_in_block("users.users." .. user, { "packages" })
+	if open_bracket then
+		return open_bracket
 	end
-	local block = text:sub(brace_open, brace_close)
-	local rel = block:find("packages", 1, true)
-	if not rel then
-		io.stderr:write("could not find packages list for ", anchor, "\n")
-		os.exit(1)
+
+	open_bracket = find_in_block("home-manager.users." .. user, { "home.packages", "packages" })
+	if open_bracket then
+		return open_bracket
 	end
-	local packages_idx = brace_open + rel - 1
-	local open_bracket = text:find("[", packages_idx, true)
-	if not open_bracket or open_bracket > brace_close then
-		io.stderr:write("could not find packages list for ", anchor, "\n")
-		os.exit(1)
-	end
-	return open_bracket
+
+	return nil
 end
 
 local text = read_file(path)
@@ -514,6 +658,13 @@ elseif scope == "user" then
 		os.exit(1)
 	end
 	open_bracket = find_user_packages_list(text, target_user)
+	if not open_bracket and platform == "macos" then
+		open_bracket = find_system_packages_list(text)
+	end
+	if not open_bracket then
+		io.stderr:write("could not find packages list for ", target_user, " in ", path, "\n")
+		os.exit(1)
+	end
 else
 	io.stderr:write("unknown scope ", scope, "\n")
 	os.exit(1)
@@ -541,6 +692,7 @@ ixnay_add_remove_package() {
 	local scope="$2"
 	local attr_expr="$3"
 	local target_user="${IXNAY_ADD_USER:-$USER}"
+	local platform="${IXNAY_ADD_PLATFORM:-}"
 
 	if [ ! -f "$file_path" ]; then
 		echo "target file '$file_path' not found" >&2
@@ -568,7 +720,7 @@ ixnay_add_remove_package() {
 			;;
 	esac
 
-	ixnay_add_ensure_markers "$file_path" "$scope" "$start_marker" "$end_marker" "$target_user" || return 1
+	ixnay_add_ensure_markers "$file_path" "$scope" "$start_marker" "$end_marker" "$target_user" "$platform" || return 1
 
 	local LUA_BIN
 	if ! LUA_BIN=$(ixnay_add_lua_bin); then
