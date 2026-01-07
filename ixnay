@@ -478,7 +478,7 @@ ixnay() {
 				local has_darwin_installed="$?"
 				if [ "$has_darwin_installed" = "0" ]; then
 					shift;
-					local cmd="darwin-rebuild switch --flake ~/.config/nix 2>&1 | tee \"$LOGFILE\"";
+					local cmd="sudo darwin-rebuild switch --flake ~/.config/nix 2>&1 | tee \"$LOGFILE\"";
 					case $1 in
 						no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
 							;;
@@ -490,9 +490,9 @@ ixnay() {
 					[ -n "${DRY_RUN}" ] && return 0
 					eval "$cmd"
 				else
-					[ "$IXNAY_MUTE_CMD_ECHO" ] || caution "nix run nix-darwin -- switch --flake ~/.config/nix 2>&1 | tee \"$LOGFILE\""
+					[ "$IXNAY_MUTE_CMD_ECHO" ] || caution "sudo nix run nix-darwin -- switch --flake ~/.config/nix 2>&1 | tee \"$LOGFILE\""
 					[ -n "${DRY_RUN}" ] && return 0
-					nix run nix-darwin -- switch --flake ~/.config/nix | tee "$LOGFILE"
+					sudo nix run nix-darwin -- switch --flake ~/.config/nix | tee "$LOGFILE"
 				fi
 			else
 				caution "This command applies an entire system configuration and thus requires NixOS. https://nixos.org/"
