@@ -269,20 +269,20 @@ ixnay() {
 					exit 1
 				}
 			}
-			/^\x20*#help($|\x20)/ {
-				sub(/^\x20+/, "", $0)
+			/^[[:space:]]*#help($|[[:space:]])/ {
+				sub(/^[[:space:]]+/, "", $0)
 				print substr($0, 7)
 				next
 			}
 			/#nodoc$/ { next }
-			/^\x20+(""|\*|(-?\\?[a-zA-Z\?]|(--)?[a-zA-Z0-9\-_]{2,})(\x20\|\x20(-?\\?[a-zA-Z\?]|(--)?[a-zA-Z0-9\-_]{2,}))*\x20?)\)/ {
-				sub(/^\x20+/,"", $0)
+			/^[[:space:]]+(""|\*|(-?\\?[a-zA-Z\?]|(--)?[a-zA-Z0-9\-_]{2,})([[:space:]]\|[[:space:]](-?\\?[a-zA-Z\?]|(--)?[a-zA-Z0-9\-_]{2,}))*[[:space:]]?)\)/ {
+				sub(/^[[:space:]]+/,"", $0)
 				sub(/^\*\)/,"<arg>", $0)
 				sub(/^""/,"", $0)
-				sub(/\)\x20+#args\x20+/," ", $0)
-				sub(/\)\x20+#.*$/,"", $0)
-				sub(/\)\x20*$/,"", $0)
-				sub(/^\x20*/,"", $0)
+				sub(/\)[[:space:]]+#args[[:space:]]+/," ", $0)
+				sub(/\)[[:space:]]+#.*$/,"", $0)
+				sub(/\)[[:space:]]*$/,"", $0)
+				sub(/^[[:space:]]*/,"", $0)
 				print ""
 				print "ixnay " $0
 			}
@@ -373,9 +373,9 @@ ixnay() {
 			local attr_expr="${branch}.${package}"
 			if [ "$add_platform" = "macos" ]; then
 				case "$branch" in
-					unstable) attr_expr="pkgs.${package}" ;;
-					stable) attr_expr="stable-pkgs.${package}" ;;
-					master) attr_expr="master-pkgs.${package}" ;;
+					unstable) attr_expr="pkgs.${package}" ;; #nodoc
+					stable) attr_expr="stable-pkgs.${package}" ;; #nodoc
+					master) attr_expr="master-pkgs.${package}" ;; #nodoc
 				esac
 			fi
 			local description_cmd="nix eval --raw nixpkgs#${package}.meta.description"
@@ -428,9 +428,9 @@ ixnay() {
 			local rm_attr="${rm_branch}.${rm_package}"
 			if [ "$rm_platform" = "macos" ]; then
 				case "$rm_branch" in
-					unstable) rm_attr="pkgs.${rm_package}" ;;
-					stable) rm_attr="stable-pkgs.${rm_package}" ;;
-					master) rm_attr="master-pkgs.${rm_package}" ;;
+					unstable) rm_attr="pkgs.${rm_package}" ;; #nodoc
+					stable) rm_attr="stable-pkgs.${rm_package}" ;; #nodoc
+					master) rm_attr="master-pkgs.${rm_package}" ;; #nodoc
 				esac
 			fi
 			if [ -n "$DRY_RUN" ]; then
