@@ -24,9 +24,9 @@ set -o pipefail;
 #help
 #help Usage: ixnay <command> [<args>] [<options>]
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd)"
 source "$SCRIPT_DIR/lib/add_command.sh"
-TEST_RUNNER_DEFAULT="$SCRIPT_DIR/test"
+TEST_RUNNER_DEFAULT="$SCRIPT_DIR/ixnay_test"
 
 # Only define support functions if they aren't already defined in my environment (or yours)
 # I use this pattern locally in all my personal functions to edit them via "edit <functionname>"
