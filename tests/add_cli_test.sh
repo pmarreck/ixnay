@@ -26,7 +26,7 @@ export IXNAY_EXPECT_NIX_ARGS="eval --raw nixpkgs#ripgrep.meta.description"
 export IXNAY_TEST_NIX_OUTPUT="Fast search tool"
 
 set +e
-add_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=nixos IXNAY_NIXOS_CONFIG="$tmp_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/ixnay" add user stable ripgrep 2>&1)"
+add_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=nixos IXNAY_NIXOS_CONFIG="$tmp_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/bin/ixnay" add user stable ripgrep 2>&1)"
 cli_status=$?
 set -e
 
@@ -34,7 +34,7 @@ assert_eq 0 "$cli_status" "cli add exits successfully"
 assert_eq "Added stable.ripgrep to sample's packages in $tmp_cli" "$add_output" "cli add prints success message"
 
 set +e
-duplicate_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=nixos IXNAY_NIXOS_CONFIG="$tmp_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/ixnay" add user stable ripgrep 2>&1)"
+duplicate_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=nixos IXNAY_NIXOS_CONFIG="$tmp_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/bin/ixnay" add user stable ripgrep 2>&1)"
 duplicate_status=$?
 set -e
 
@@ -42,7 +42,7 @@ assert_eq 0 "$duplicate_status" "duplicate cli add exits successfully"
 assert_eq "stable.ripgrep already present; skipping" "$duplicate_output" "duplicate cli add reports skip"
 
 set +e
-conflict_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=nixos IXNAY_NIXOS_CONFIG="$tmp_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/ixnay" add user master ripgrep 2>&1)"
+conflict_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=nixos IXNAY_NIXOS_CONFIG="$tmp_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/bin/ixnay" add user master ripgrep 2>&1)"
 conflict_status=$?
 set -e
 
@@ -60,7 +60,7 @@ export IXNAY_EXPECT_NIX_ARGS="eval --raw nixpkgs#fzf.meta.description"
 export IXNAY_TEST_NIX_OUTPUT="Command-line fuzzy finder"
 
 set +e
-darwin_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=macos IXNAY_DARWIN_FLAKE="$tmp_darwin_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/ixnay" add system unstable fzf 2>&1)"
+darwin_output="$(IXNAY_NO_COLOR=1 IXNAY_ADD_PLATFORM=macos IXNAY_DARWIN_FLAKE="$tmp_darwin_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/bin/ixnay" add system unstable fzf 2>&1)"
 darwin_status=$?
 set -e
 

@@ -22,7 +22,7 @@ cp "$fixture" "$tmp_cli"
 IXNAY_ADD_PLATFORM=nixos IXNAY_ADD_USER=sample ixnay_add_insert_package "$tmp_cli" user "stable.ripgrep" "Fast search tool"
 
 set +e
-IXNAY_ADD_PLATFORM=nixos IXNAY_NIXOS_CONFIG="$tmp_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/ixnay" remove user stable ripgrep 2>&1
+IXNAY_ADD_PLATFORM=nixos IXNAY_NIXOS_CONFIG="$tmp_cli" IXNAY_ADD_USER=sample IXNAY_MUTE_CMD_ECHO=1 "$ROOT_DIR/bin/ixnay" remove user stable ripgrep 2>&1
 cli_status=$?
 set -e
 
