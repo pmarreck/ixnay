@@ -461,6 +461,12 @@ ixnay() {
 				fi
 				shift;
 				local success=0;
+				# Work around Nix bug #13367: `nixos-rebuild` aborts activation with
+				# "configuration path seems to be missing essential files" when the
+				# current directory is one it dislikes. Run from $HOME, which is always
+				# safe. (ixnay is a separate process, so this never changes the caller's
+				# shell CWD.)
+				cd "$HOME" || { caution "ixnay reify: could not cd to \$HOME ($HOME)"; return 1; }
 				case $1 in
 					no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
 						[ "$IXNAY_MUTE_CMD_ECHO" ] || caution "sudo nixos-rebuild $SWITCH_OR_BOOT 2>&1 | tee \"$LOGFILE\""
