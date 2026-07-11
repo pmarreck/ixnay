@@ -446,10 +446,10 @@ ixnay() {
 			#help -- Also logs its output to IXNAY_LOGFILEDIR (defaults to $XDG_CACHE_HOME/ixnay), rotating it with a datetimestamp,
 			#help -- and then displays it.
 			#help -- NixOS required currently. May work with nix-darwin in the future.
-			#help -- Auto-detects a flake config: if /etc/nixos/flake.nix exists, uses
-			#help    'nixos-rebuild --flake /etc/nixos#nixos', and a normal (upgrading) reify runs
-			#help    'nix flake update' first. Falls back to channel-based nixos-rebuild otherwise.
-			#help    Override with IXNAY_NIXOS_DIR / IXNAY_NIXOS_FLAKE.
+			#help -- Auto-detects a flake config at or above /etc/nixos, uses the current hostname
+			#help    as its output, and runs 'nix flake update' before a normal (upgrading) reify.
+			#help    Falls back to channel-based nixos-rebuild otherwise. Override with
+			#help    IXNAY_NIXOS_DIR / IXNAY_NIXOS_FLAKE / IXNAY_NIXOS_FLAKE_HOST.
 			#help -- (The "here" arg is a synonym for the other "no-upgrade" options.)
 			if [ "$DISTRO" = "nixos" ] || [ "$DISTRO" = "wsl" ]; then
 				# make sure we're not just doing a dry run
@@ -472,14 +472,25 @@ ixnay() {
 				# safe. (ixnay is a separate process, so this never changes the caller's
 				# shell CWD.)
 				cd "$HOME" || { caution "ixnay reify: could not cd to \$HOME ($HOME)"; return 1; }
-				# Autodetect whether the NixOS config is flake-controlled. If
-				# $IXNAY_NIXOS_DIR/flake.nix exists we drive nixos-rebuild with
-				# --flake; otherwise fall back to the legacy channel commands.
-				# (IXNAY_NIXOS_DIR/IXNAY_NIXOS_FLAKE are overridable for tests/other hosts.)
+				# Resolve symlinks, then walk upward so a host directory inside a shared
+				# configuration repository still finds the repository's flake.nix.
+				# The explicit variables keep migrations and non-standard output names usable.
 				local NIXOS_DIR="${IXNAY_NIXOS_DIR:-/etc/nixos}"
+				local FLAKE_DIR=""
+				local probe_dir
+				probe_dir="$(realpath -e "$NIXOS_DIR" 2>/dev/null || true)"
+				while [ -n "$probe_dir" ]; do
+					if [ -f "$probe_dir/flake.nix" ]; then
+						FLAKE_DIR="$probe_dir"
+						break
+					fi
+					[ "$probe_dir" = "/" ] && break
+					probe_dir="$(dirname "$probe_dir")"
+				done
 				local cmd
-				if [ -f "$NIXOS_DIR/flake.nix" ]; then
-					local FLAKE_REF="${IXNAY_NIXOS_FLAKE:-${NIXOS_DIR}#nixos}"
+				if [ -n "$FLAKE_DIR" ]; then
+					local FLAKE_HOST="${IXNAY_NIXOS_FLAKE_HOST:-$(hostname)}"
+					local FLAKE_REF="${IXNAY_NIXOS_FLAKE:-${FLAKE_DIR}#${FLAKE_HOST}}"
 					case $1 in
 						no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
 							cmd="sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" 2>&1 | tee \"$LOGFILE\""
@@ -487,7 +498,7 @@ ixnay() {
 						*) #nodoc
 							# `--upgrade` is a channel concept; for a flake, "upgrade" means
 							# refreshing the lock (all inputs) before rebuilding.
-							cmd="sudo nix flake update --flake \"$NIXOS_DIR\" && sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" 2>&1 | tee \"$LOGFILE\""
+							cmd="sudo nix flake update --flake \"$FLAKE_DIR\" && sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" 2>&1 | tee \"$LOGFILE\""
 							;;
 					esac
 				else
