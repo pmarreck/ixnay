@@ -244,7 +244,8 @@ ixnay() {
 		echo "$dist_name"
 	}
 	local DISTRO
-	DISTRO=$(distro)
+	# IXNAY_DISTRO overrides autodetection (deterministic tests; non-NixOS/CI hosts).
+	DISTRO="${IXNAY_DISTRO:-$(distro)}"
 	local IXNAY_ABOUT="IXNAY: A sane, beginner-friendly wrapper for nix-shell, nix and friends."
 	# datetimestamp of a file
 	function datetimestampfile() {
@@ -445,6 +446,10 @@ ixnay() {
 			#help -- Also logs its output to IXNAY_LOGFILEDIR (defaults to $XDG_CACHE_HOME/ixnay), rotating it with a datetimestamp,
 			#help -- and then displays it.
 			#help -- NixOS required currently. May work with nix-darwin in the future.
+			#help -- Auto-detects a flake config: if /etc/nixos/flake.nix exists, uses
+			#help    'nixos-rebuild --flake /etc/nixos#nixos', and a normal (upgrading) reify runs
+			#help    'nix flake update' first. Falls back to channel-based nixos-rebuild otherwise.
+			#help    Override with IXNAY_NIXOS_DIR / IXNAY_NIXOS_FLAKE.
 			#help -- (The "here" arg is a synonym for the other "no-upgrade" options.)
 			if [ "$DISTRO" = "nixos" ] || [ "$DISTRO" = "wsl" ]; then
 				# make sure we're not just doing a dry run
@@ -467,20 +472,38 @@ ixnay() {
 				# safe. (ixnay is a separate process, so this never changes the caller's
 				# shell CWD.)
 				cd "$HOME" || { caution "ixnay reify: could not cd to \$HOME ($HOME)"; return 1; }
-				case $1 in
-					no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
-						[ "$IXNAY_MUTE_CMD_ECHO" ] || caution "sudo nixos-rebuild $SWITCH_OR_BOOT 2>&1 | tee \"$LOGFILE\""
-						[ -n "${DRY_RUN}" ] && return 0
-						sudo nixos-rebuild $SWITCH_OR_BOOT 2>&1 | tee "$LOGFILE"
-						success="$?"
-						;;
-					*) #nodoc
-						[ "$IXNAY_MUTE_CMD_ECHO" ] || caution "sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade 2>&1 | tee \"$LOGFILE\""
-						[ -n "${DRY_RUN}" ] && return 0
-						sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade 2>&1 | tee "$LOGFILE"
-						success="$?"
-						;;
-				esac
+				# Autodetect whether the NixOS config is flake-controlled. If
+				# $IXNAY_NIXOS_DIR/flake.nix exists we drive nixos-rebuild with
+				# --flake; otherwise fall back to the legacy channel commands.
+				# (IXNAY_NIXOS_DIR/IXNAY_NIXOS_FLAKE are overridable for tests/other hosts.)
+				local NIXOS_DIR="${IXNAY_NIXOS_DIR:-/etc/nixos}"
+				local cmd
+				if [ -f "$NIXOS_DIR/flake.nix" ]; then
+					local FLAKE_REF="${IXNAY_NIXOS_FLAKE:-${NIXOS_DIR}#nixos}"
+					case $1 in
+						no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
+							cmd="sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" 2>&1 | tee \"$LOGFILE\""
+							;;
+						*) #nodoc
+							# `--upgrade` is a channel concept; for a flake, "upgrade" means
+							# refreshing the lock (all inputs) before rebuilding.
+							cmd="sudo nix flake update --flake \"$NIXOS_DIR\" && sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" 2>&1 | tee \"$LOGFILE\""
+							;;
+					esac
+				else
+					case $1 in
+						no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
+							cmd="sudo nixos-rebuild $SWITCH_OR_BOOT 2>&1 | tee \"$LOGFILE\""
+							;;
+						*) #nodoc
+							cmd="sudo nixos-rebuild $SWITCH_OR_BOOT --upgrade 2>&1 | tee \"$LOGFILE\""
+							;;
+					esac
+				fi
+				[ "$IXNAY_MUTE_CMD_ECHO" ] || caution "$cmd"
+				[ -n "${DRY_RUN}" ] && return 0
+				eval "$cmd"
+				success="$?"
 				# if SWITCH_OR_BOOT is "boot", recommend rebooting
 				# as long as no errors
 				if [ "$success" = "0" ]; then
