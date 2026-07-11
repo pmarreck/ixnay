@@ -49,11 +49,13 @@ flake_dir="$(mktemp -d "${TMPDIR:-/tmp}/ixnay-flake.XXXXXX")"
 # assertions include the surrounding double quotes deliberately.
 out="$(render_reify "$flake_dir" nixos no-upgrade)"
 assert_contains   "nixos-rebuild boot --flake \"$flake_dir#nixos\"" "$out" "flake no-upgrade uses quoted --flake ref"
+assert_contains   "--option always-allow-substitutes true" "$out" "flake no-upgrade prefers signed binary substitutes"
 assert_not_contains "--upgrade" "$out" "flake no-upgrade has no --upgrade"
 
 out_up="$(render_reify "$flake_dir" nixos)" # no sub-arg => upgrade path
 assert_contains     "nix flake update --flake \"$flake_dir\"" "$out_up" "flake upgrade runs nix flake update on the flake dir"
 assert_contains     "--flake \"$flake_dir#nixos\""            "$out_up" "flake upgrade rebuilds via quoted --flake ref"
+assert_contains     "--option always-allow-substitutes true"     "$out_up" "flake upgrade prefers signed binary substitutes"
 assert_not_contains "nixos-rebuild boot --upgrade"           "$out_up" "flake upgrade avoids channel --upgrade"
 
 # A host directory may be symlinked from /etc/nixos while flake.nix lives at

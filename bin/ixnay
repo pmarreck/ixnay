@@ -491,14 +491,17 @@ ixnay() {
 				if [ -n "$FLAKE_DIR" ]; then
 					local FLAKE_HOST="${IXNAY_NIXOS_FLAKE_HOST:-$(hostname)}"
 					local FLAKE_REF="${IXNAY_NIXOS_FLAKE:-${FLAKE_DIR}#${FLAKE_HOST}}"
+					# Cache artifacts remain signature-verified. Prefer them when packages
+					# set preferLocalBuild so a normal reify does not launch huge source builds.
+					local REBUILD_SUBSTITUTES="--option always-allow-substitutes true"
 					case $1 in
 						no-upgrade | no-update | no-up | --no-up | --no-upgrade | --no-update | here) #nodoc
-							cmd="sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" 2>&1 | tee \"$LOGFILE\""
+							cmd="sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" $REBUILD_SUBSTITUTES 2>&1 | tee \"$LOGFILE\""
 							;;
 						*) #nodoc
 							# `--upgrade` is a channel concept; for a flake, "upgrade" means
 							# refreshing the lock (all inputs) before rebuilding.
-							cmd="sudo nix flake update --flake \"$FLAKE_DIR\" && sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" 2>&1 | tee \"$LOGFILE\""
+							cmd="sudo nix flake update --flake \"$FLAKE_DIR\" && sudo nixos-rebuild $SWITCH_OR_BOOT --flake \"$FLAKE_REF\" $REBUILD_SUBSTITUTES 2>&1 | tee \"$LOGFILE\""
 							;;
 					esac
 				else
