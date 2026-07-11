@@ -26,6 +26,14 @@ render_reify() { # $1 = nixos_dir ; $2 = flake host ; $3.. = reify args
 		"$IXNAY" reify "$@" 2>&1
 }
 
+render_reify_auto_host() { # $1 = nixos_dir ; $2.. = reify args
+	local dir="$1"
+	shift
+	env -u IXNAY_NIXOS_FLAKE_HOST \
+		IXNAY_NO_COLOR=1 IXNAY_DISTRO=nixos DRY_RUN=1 IXNAY_NIXOS_DIR="$dir" \
+		"$IXNAY" reify "$@" 2>&1
+}
+
 assert_contains() { # needle haystack desc
 	_ixnay_test_total=$((_ixnay_test_total + 1))
 	case "$2" in
@@ -66,6 +74,18 @@ mkdir -p "$host_dir"
 ln -s "$host_dir" "$link_dir/nixos"
 out_nested="$(render_reify "$link_dir/nixos" framework-nixos no-upgrade)"
 assert_contains "nixos-rebuild boot --flake \"$flake_dir#framework-nixos\"" "$out_nested" "nested symlink config finds parent flake and host output"
+
+# During a rename the current kernel hostname can still be the retired value.
+# Prefer the host declared in the selected configuration module over that stale
+# runtime name, while an explicit IXNAY_NIXOS_FLAKE_HOST remains authoritative.
+printf 'networking.hostName = "thelio-nixos";\n' > "$flake_dir/configuration.nix"
+out_renamed="$(render_reify_auto_host "$flake_dir" no-update)"
+assert_contains "nixos-rebuild boot --flake \"$flake_dir#thelio-nixos\"" "$out_renamed" "declared host name bridges a pending hostname rename"
+assert_not_contains "#nixos\"" "$out_renamed" "rename bridge does not use retired generic output"
+
+out_help="$(render_reify "$flake_dir" nixos --help)"
+assert_contains "ixnay reify" "$out_help" "reify help renders command help"
+assert_not_contains "sudo nixos-rebuild" "$out_help" "reify help never renders a rebuild command"
 
 # ---- Channel mode: dir lacks flake.nix (legacy behavior unchanged) ----
 chan_dir="$(mktemp -d "${TMPDIR:-/tmp}/ixnay-chan.XXXXXX")"

@@ -446,11 +446,17 @@ ixnay() {
 			#help -- Also logs its output to IXNAY_LOGFILEDIR (defaults to $XDG_CACHE_HOME/ixnay), rotating it with a datetimestamp,
 			#help -- and then displays it.
 			#help -- NixOS required currently. May work with nix-darwin in the future.
-			#help -- Auto-detects a flake config at or above /etc/nixos, uses the current hostname
-			#help    as its output, and runs 'nix flake update' before a normal (upgrading) reify.
+			#help -- Auto-detects a flake config at or above /etc/nixos, uses its declared NixOS host name
+			#help    as its output (falling back to the current hostname), and runs 'nix flake update' before a normal (upgrading) reify.
 			#help    Falls back to channel-based nixos-rebuild otherwise. Override with
 			#help    IXNAY_NIXOS_DIR / IXNAY_NIXOS_FLAKE / IXNAY_NIXOS_FLAKE_HOST.
 			#help -- (The "here" arg is a synonym for the other "no-upgrade" options.)
+			case "${2:-}" in
+				help | -h | --help | -?)
+					_ixnay_help
+					return 0
+					;;
+			esac
 			if [ "$DISTRO" = "nixos" ] || [ "$DISTRO" = "wsl" ]; then
 				# make sure we're not just doing a dry run
 				if [ -z "${DRY_RUN:-}" ]; then
@@ -489,7 +495,14 @@ ixnay() {
 				done
 				local cmd
 				if [ -n "$FLAKE_DIR" ]; then
-					local FLAKE_HOST="${IXNAY_NIXOS_FLAKE_HOST:-$(hostname)}"
+					# A pending hostname rename still has the old kernel hostname until reboot.
+					# Read the selected module first so `ixnay reify --no-update` can build
+					# the new flake output without an environment-variable ceremony.
+					local CONFIGURED_FLAKE_HOST=""
+					if [ -z "${IXNAY_NIXOS_FLAKE_HOST:-}" ] && [ -r "$NIXOS_DIR/configuration.nix" ]; then
+						CONFIGURED_FLAKE_HOST="$(sed -nE 's/^[[:space:]]*(networking\.)?hostName[[:space:]]*=[[:space:]]*"([^"]+)".*/\2/p' "$NIXOS_DIR/configuration.nix" | head -n 1)"
+					fi
+					local FLAKE_HOST="${IXNAY_NIXOS_FLAKE_HOST:-${CONFIGURED_FLAKE_HOST:-$(hostname)}}"
 					local FLAKE_REF="${IXNAY_NIXOS_FLAKE:-${FLAKE_DIR}#${FLAKE_HOST}}"
 					# Cache artifacts remain signature-verified. Prefer them when packages
 					# set preferLocalBuild so a normal reify does not launch huge source builds.

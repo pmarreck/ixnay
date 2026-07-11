@@ -24,11 +24,20 @@ IXNAY is a pragmatic TUI-style wrapper around the Nix toolchain. It focuses on t
 | `ixnay add <user|system> <stable|unstable|master> <pkg>` | Inserts an ixnay-managed package entry with description into the appropriate config file. |
 | `ixnay remove <user|system> <stable|unstable|master> <pkg>` | Removes the exact entry previously created by `add`. |
 | `ixnay describe <pkg>` | Prints the nixpkgs description via `nix eval --raw`. |
+| `ixnay reify --no-update` | Builds the declared NixOS flake without refreshing its lock, then makes it the next boot generation. |
 | `ixnay test [args…]` | Runs the full test suite (default `./test`) with live output. |
 | `ixnay --test [args…]` | Runs the same suite quietly and exits with the failure count. |
 | `ixnay -a` / `ixnay --about` | Prints the one-line project description. |
 
 All commands honour `IXNAY_MUTE_CMD_ECHO` (suppress underlying command output) and `DRY_RUN` (show what would happen without executing it). Declarative operations additionally use `IXNAY_ADD_PLATFORM`, `IXNAY_DARWIN_FLAKE`, and `IXNAY_NIXOS_CONFIG` to override target files during testing.
+
+For a flake-based NixOS host, `reify` chooses the declared `hostName` from the
+selected `configuration.nix`. That makes a pending hostname rename safe: the
+new flake output is selected before the next reboot changes the kernel hostname.
+`IXNAY_NIXOS_FLAKE_HOST` remains the explicit override. By default reify uses
+`nixos-rebuild boot`, so `ixnay reify --no-update` does not log out the current
+desktop; reboot when you are ready to activate the staged generation. Set
+`SWITCH_NOW=1` only when an immediate live switch is explicitly wanted.
 
 ## Testing
 

@@ -1,0 +1,6 @@
+# Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
+ver=1.2
+annotate=[
+	bin/ixnay = Flake-aware NixOS reify wrapper; uses the declared hostName to bridge pending hostname renames.
+	tests/reify_flake_test.sh = TDD contract for flake detection, host selection, and safe reify help behavior.
+]

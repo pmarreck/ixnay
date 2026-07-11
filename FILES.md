@@ -4,6 +4,7 @@
 | --- | --- |
 | `FILES.md` | Master list of files created during this session. |
 | `PLAN.md` | Project plan and running status. |
+| `tests/reify_flake_test.sh` | Tests flake discovery, declared-host selection, and safe reify help behavior. |
 | `test` | Top-level script to run all unit tests. |
 | `tests/test_helper.sh` | Shared assertion helpers for shell-based unit tests. |
 | `tests/add_command_test.sh` | Tests for the new `ixnay add` command behavior. |
