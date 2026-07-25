@@ -61,7 +61,12 @@ assert_contains   "--option always-allow-substitutes true" "$out" "flake no-upgr
 assert_not_contains "--upgrade" "$out" "flake no-upgrade has no --upgrade"
 
 out_up="$(render_reify "$flake_dir" nixos)" # no sub-arg => upgrade path
-assert_contains     "nix flake update --flake \"$flake_dir\"" "$out_up" "flake upgrade runs nix flake update on the flake dir"
+assert_contains     "flake update --flake \"$flake_dir\"" "$out_up" "flake upgrade runs nix flake update on the flake dir"
+# `sudo nix flake update` runs as root, whose nix.conf lacks the flakes/nix-command
+# experimental features (they live only in the *user's* ~/.config/nix/nix.conf), so
+# the lock refresh must pass them explicitly or it dies with
+# "experimental Nix feature 'nix-command' is disabled".
+assert_contains     "nix --extra-experimental-features \"nix-command flakes\" flake update" "$out_up" "flake upgrade passes experimental-features to sudo'd nix flake update"
 assert_contains     "--flake \"$flake_dir#nixos\""            "$out_up" "flake upgrade rebuilds via quoted --flake ref"
 assert_contains     "--option always-allow-substitutes true"     "$out_up" "flake upgrade prefers signed binary substitutes"
 assert_not_contains "nixos-rebuild boot --upgrade"           "$out_up" "flake upgrade avoids channel --upgrade"
